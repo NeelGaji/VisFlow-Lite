@@ -1,0 +1,36 @@
+.node-panel {
+  position: fixed;
+  top: calc(41px + 17.5px); // navbar-height + icon-size/2
+  padding: 0.25rem;
+  background: white;
+  z-index: 5001;
+  
+  // Box styling
+  box-shadow: 1px 2px 4px rgba(0, 0, 0, 0.05);
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  
+  // Border touch left
+  border-left: none;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  
+  // Padding
+  padding: 0.25rem 1.5rem;
+}
+
+// Transition animations
+.slide-fade-left-enter-active,
+.slide-fade-left-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-fade-left-enter-from {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+.slide-fade-left-leave-to {
+  transform: translateX(-100%);
+  opacity: 0;
+}

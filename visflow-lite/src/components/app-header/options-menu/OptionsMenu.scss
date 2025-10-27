@@ -1,0 +1,19 @@
+.dropdown-item {
+  outline: none;
+  display: flex;
+  align-items: center;
+
+  &:focus,
+  &:hover {
+    background-color: #e8f5e9;
+  }
+
+  &:active {
+    background-color: #4caf50;
+  }
+
+  i {
+    width: 1rem;
+    text-align: center;
+  }
+}
