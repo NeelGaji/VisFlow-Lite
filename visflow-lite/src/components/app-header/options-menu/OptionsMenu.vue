@@ -16,13 +16,6 @@
           Node Panel
         </a>
       </li>
-      <li><hr class="dropdown-divider" /></li>
-      <li>
-        <a class="dropdown-item" href="#" @click.prevent="testAddNode">
-          <i class="bi bi-plus-circle me-2"></i>
-          Test Add Node
-        </a>
-      </li>
     </ul>
   </li>
 </template>
@@ -30,7 +23,7 @@
 <script setup lang="ts">
 import { useOptionsMenu } from './OptionsMenu'
 
-const { nodePanelVisible, toggleNodePanel, testAddNode } = useOptionsMenu()
+const { nodePanelVisible, toggleNodePanel } = useOptionsMenu()
 </script>
 
 <style scoped lang="scss" src="./OptionsMenu.scss"></style>

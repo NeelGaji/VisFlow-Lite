@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useInteractionStore, type Point } from '@/stores/interaction'
 import { useDataflowStore } from '@/stores/dataflow'
@@ -8,6 +8,8 @@ enum DragMode {
   NONE = 'none',
   PAN = 'pan',
   SELECT = 'select',
+  NODE_DRAG = 'node-drag',
+  PORT_DRAG = 'port-drag',
 }
 
 interface Box {
@@ -19,13 +21,14 @@ interface Box {
 
 export function useDataflowCanvas() {
   // Template refs
-  const nodes = ref<HTMLElement | null>(null)
+  const nodesContainer = ref<HTMLElement | null>(null)
   const edges = ref<SVGElement | null>(null)
 
   // Stores
   const interactionStore = useInteractionStore()
   const dataflowStore = useDataflowStore()
   const { mousePosition, isShiftPressed } = storeToRefs(interactionStore)
+  const { nodes: canvasNodes, edges: canvasEdges, edgeBeingCreated } = storeToRefs(dataflowStore)
   const { trackMouseMove, setShiftPressed } = interactionStore
   const { moveDiagram, setCanvas } = dataflowStore
 
@@ -35,10 +38,22 @@ export function useDataflowCanvas() {
   const lastMouseY = ref(0)
   const dragStartPoint = ref<Point>({ x: 0, y: 0 })
   const dragEndPoint = ref<Point>({ x: 0, y: 0 })
+  
+  // Node dragging state
+  const draggedNodeIds = ref<Set<string>>(new Set())
+  const nodeStartPositions = ref<Map<string, Point>>(new Map())
+  
+  // Port dragging state
+  const isPortDragging = ref(false)
+  
+  // Drag and drop state
+  const isDragOver = ref(false)
 
   // Computed
   const isPanning = computed(() => dragMode.value === DragMode.PAN)
   const isSelecting = computed(() => dragMode.value === DragMode.SELECT)
+  const isDraggingNodes = computed(() => dragMode.value === DragMode.NODE_DRAG)
+  const isDraggingPort = computed(() => dragMode.value === DragMode.PORT_DRAG)
 
   const selectBox = computed<Box>(() => {
     const xl = Math.min(dragStartPoint.value.x, dragEndPoint.value.x)
@@ -64,55 +79,40 @@ export function useDataflowCanvas() {
   })
 
   // Node/Edge management methods
-  function addNode(node: NodeData): HTMLDivElement {
-    if (!nodes.value) {
-      throw new Error('Canvas nodes container not ready')
+  function onNodeMouseDown(event: MouseEvent, nodeId: string) {
+    // Only respond to left click
+    if (event.button !== 0) return
+    
+    console.log('Starting node drag for:', nodeId)
+    
+    // Enter node drag mode
+    dragMode.value = DragMode.NODE_DRAG
+    
+    // For now, just drag the single clicked node
+    // Later we'll support dragging multiple selected nodes
+    draggedNodeIds.value = new Set([nodeId])
+    
+    // Store initial positions
+    const node = canvasNodes.value.find(n => n.id === nodeId)
+    if (node) {
+      nodeStartPositions.value.set(nodeId, { x: node.x, y: node.y })
+      console.log('Node initial position:', node.x, node.y)
     }
     
-    // Create a simple placeholder div for the node
-    const nodeElement = document.createElement('div')
-    nodeElement.id = node.id
-    nodeElement.className = 'node-placeholder'
-    nodeElement.style.position = 'absolute'
-    nodeElement.style.left = `${node.x}px`
-    nodeElement.style.top = `${node.y}px`
-    nodeElement.style.width = '100px'
-    nodeElement.style.height = '60px'
-    nodeElement.style.backgroundColor = '#fff'
-    nodeElement.style.border = '2px solid #333'
-    nodeElement.style.borderRadius = '4px'
-    nodeElement.style.padding = '8px'
-    nodeElement.textContent = `${node.type}\n(${node.id.slice(0, 8)}...)`
+    lastMouseX.value = event.pageX
+    lastMouseY.value = event.pageY
     
-    nodes.value.appendChild(nodeElement)
-    return nodeElement
+    event.stopPropagation()
+    event.preventDefault()
   }
 
-  function removeNode(nodeId: string) {
-    if (!nodes.value) return
-    
-    const nodeElement = document.getElementById(nodeId)
-    if (nodeElement && nodeElement.parentElement === nodes.value) {
-      nodes.value.removeChild(nodeElement)
-    }
-  }
-
-  function addEdge(edgeData: any) {
-    // Placeholder for edge addition
-    console.log('addEdge called (not implemented yet)', edgeData)
-  }
-
-  function removeEdge(edgeId: string) {
-    // Placeholder for edge removal
-    console.log('removeEdge called (not implemented yet)', edgeId)
-  }
-
+  // Canvas utility methods
   function getWidth(): number {
-    return nodes.value?.offsetWidth || 0
+    return nodesContainer.value?.offsetWidth || 0
   }
 
   function getHeight(): number {
-    return nodes.value?.offsetHeight || 0
+    return nodesContainer.value?.offsetHeight || 0
   }
 
   // Keyboard event handlers
@@ -130,7 +130,20 @@ export function useDataflowCanvas() {
 
   // Mouse event handlers
   function onMouseDown(event: MouseEvent) {
-    // Only respond to left click on the SVG background
+    const target = event.target as HTMLElement
+    
+    // Port clicks are handled by Port component via startEdgeCreation
+    // which triggers the watcher to set PORT_DRAG mode
+    
+    // Check if clicking on a node
+    const nodeElement = target.closest('.node') as HTMLElement
+    if (nodeElement && nodeElement.dataset.nodeId) {
+      // Clicking on a node - start node drag
+      onNodeMouseDown(event, nodeElement.dataset.nodeId)
+      return
+    }
+
+    // Only respond to left click on the SVG background for panning/selecting
     if (event.target !== edges.value || event.button !== 0) {
       dragMode.value = DragMode.NONE
       return
@@ -155,6 +168,26 @@ export function useDataflowCanvas() {
       lastMouseY.value = event.pageY
     } else if (dragMode.value === DragMode.SELECT) {
       dragEndPoint.value = { x: event.pageX, y: event.pageY }
+    } else if (dragMode.value === DragMode.NODE_DRAG) {
+      const dx = event.pageX - lastMouseX.value
+      const dy = event.pageY - lastMouseY.value
+      
+      // Update positions for all dragged nodes
+      draggedNodeIds.value.forEach(nodeId => {
+        const node = canvasNodes.value.find(n => n.id === nodeId)
+        if (node) {
+          // Update node data in store - Vue will reactively update the UI
+          node.x += dx
+          node.y += dy
+        }
+      })
+      
+      lastMouseX.value = event.pageX
+      lastMouseY.value = event.pageY
+    } else if (dragMode.value === DragMode.PORT_DRAG) {
+      // Port dragging - the edge preview will be handled by the store's edgeBeingCreated
+      // Just track mouse position for visual feedback
+      trackMouseMove(event)
     }
   }
 
@@ -166,10 +199,92 @@ export function useDataflowCanvas() {
     if (dragMode.value === DragMode.SELECT) {
       // TODO: Select nodes in box (when we have nodes)
       console.log('Selection box:', selectBox.value)
+    } else if (dragMode.value === DragMode.NODE_DRAG) {
+      // Clear node drag state
+      draggedNodeIds.value.clear()
+      nodeStartPositions.value.clear()
+    } else if (dragMode.value === DragMode.PORT_DRAG) {
+      // Check if mouse is over a valid target port
+      // Use elementFromPoint to find what's under the mouse cursor
+      const elementUnderMouse = document.elementFromPoint(event.clientX, event.clientY)
+      const portElement = elementUnderMouse?.closest('.port') as HTMLElement
+      
+      console.log('Mouse up during port drag:', {
+        elementUnderMouse,
+        portElement,
+        portId: portElement?.dataset.portId,
+        nodeId: portElement?.dataset.nodeId,
+        edgeBeingCreated: dataflowStore.edgeBeingCreated
+      })
+      
+      if (portElement && portElement.dataset.portId && portElement.dataset.nodeId) {
+        // Validate connection direction - can only connect output to input
+        const targetPortType = portElement.classList.contains('input') ? 'input' : 'output'
+        const sourcePortType = dataflowStore.edgeBeingCreated?.portType
+        
+        console.log('Port types:', { sourcePortType, targetPortType })
+        
+        // Only allow output -> input or input -> output (completeEdgeCreation will sort this out)
+        if (sourcePortType !== targetPortType) {
+          // Complete the edge connection
+          const targetNodeId = portElement.dataset.nodeId
+          const targetPortId = portElement.dataset.portId
+          
+          const edge = dataflowStore.completeEdgeCreation(targetNodeId, targetPortId)
+          if (edge) {
+            console.log('Created edge:', edge)
+          } else {
+            console.log('Edge creation failed - invalid connection')
+          }
+        } else {
+          console.log('Cannot connect same port types:', sourcePortType, '->', targetPortType)
+          dataflowStore.cancelEdgeCreation()
+        }
+      } else {
+        // Released outside a port - cancel edge creation
+        console.log('Released outside a port - canceling edge creation')
+        dataflowStore.cancelEdgeCreation()
+      }
+      
+      isPortDragging.value = false
     }
 
     dragMode.value = DragMode.NONE
     dragStartPoint.value = dragEndPoint.value = { x: 0, y: 0 }
+  }
+
+  // Drag and drop event handlers
+  function onDragOver(event: DragEvent) {
+    // Check if it's a node type being dragged
+    if (event.dataTransfer?.types.includes('application/visflow-node-type')) {
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'copy'
+      isDragOver.value = true
+    }
+  }
+
+  function onDragLeave(event: DragEvent) {
+    isDragOver.value = false
+  }
+
+  function onDrop(event: DragEvent) {
+    event.preventDefault()
+    isDragOver.value = false
+
+    const nodeType = event.dataTransfer?.getData('application/visflow-node-type')
+    if (!nodeType) return
+
+    // Calculate position relative to canvas, accounting for diagram offset
+    const canvasRect = nodesContainer.value?.getBoundingClientRect()
+    if (!canvasRect) return
+
+    const x = event.clientX - canvasRect.left - dataflowStore.diagramOffsetX
+    const y = event.clientY - canvasRect.top - dataflowStore.diagramOffsetY
+
+    console.log('Creating node:', nodeType, 'at', x, y)
+
+    // Create the node - it will automatically appear via Vue reactivity
+    dataflowStore.createNode(nodeType, x, y)
   }
 
   // Lifecycle
@@ -177,12 +292,8 @@ export function useDataflowCanvas() {
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
     
-    // Register canvas instance with store
+    // Register canvas instance with store (for future use with edges, etc.)
     setCanvas({
-      addNode,
-      removeNode,
-      addEdge,
-      removeEdge,
       getWidth,
       getHeight,
     })
@@ -194,22 +305,40 @@ export function useDataflowCanvas() {
     setCanvas(null)
   })
 
+  // Watch for edge creation to set port drag mode
+  watch(edgeBeingCreated, (newVal) => {
+    if (newVal) {
+      console.log('Edge creation started, setting PORT_DRAG mode')
+      dragMode.value = DragMode.PORT_DRAG
+      isPortDragging.value = true
+    } else if (dragMode.value === DragMode.PORT_DRAG) {
+      console.log('Edge creation ended, clearing PORT_DRAG mode')
+      dragMode.value = DragMode.NONE
+      isPortDragging.value = false
+    }
+  })
+
   return {
     // Refs
-    nodes,
-    edges,
+    nodesContainer,
     // State
+    canvasNodes,
+    canvasEdges,
+    edgeBeingCreated,
     mousePosition,
     isPanning,
     isSelecting,
+    isDraggingNodes,
+    isDraggingPort,
+    isPortDragging,
+    isDragOver,
     selectBoxStyle,
     // Methods
     onMouseDown,
     onMouseMove,
     onMouseUp,
-    addNode,
-    removeNode,
-    addEdge,
-    removeEdge,
+    onDragOver,
+    onDragLeave,
+    onDrop,
   }
 }

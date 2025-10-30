@@ -14,11 +14,16 @@ $margin-size-sm: 0.1rem;
 
 .node-button {
   display: inline-block;
-  cursor: pointer;
+  cursor: grab;
   transition: all 0.1s ease-in-out;
   margin: $margin-size-sm;
+  user-select: none;
 
   &:hover {
     transform: scale(1.2);
+  }
+
+  &:active {
+    cursor: grabbing;
   }
 }

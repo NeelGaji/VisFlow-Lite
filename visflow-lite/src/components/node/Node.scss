@@ -1,0 +1,96 @@
+.node {
+  position: absolute;
+  box-sizing: border-box;
+  user-select: none;
+  cursor: move;
+
+  .background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: white;
+    border: 2px solid #333;
+    border-radius: 4px;
+    z-index: 0;
+  }
+
+  .content {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding: 8px;
+    overflow: hidden;
+    z-index: 1;
+  }
+
+  .icon {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+
+    img {
+      max-width: 70%;
+      max-height: 70%;
+      object-fit: contain;
+    }
+  }
+
+  .label {
+    position: absolute;
+    bottom: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-size: 11px;
+    color: #333;
+    background-color: rgba(255, 255, 255, 0.9);
+    padding: 2px 6px;
+    border-radius: 3px;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  &.selected {
+    .background {
+      border-color: #007bff;
+      border-width: 3px;
+      box-shadow: 0 0 8px rgba(0, 123, 255, 0.5);
+    }
+  }
+
+  &.active {
+    .background {
+      border-color: #28a745;
+      border-width: 3px;
+      box-shadow: 0 0 8px rgba(40, 167, 69, 0.5);
+    }
+  }
+
+  &:hover {
+    .background {
+      border-color: #555;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+  }
+
+  .port-group {
+    position: absolute;
+    z-index: 5;
+    top: 0;
+    height: 100%;
+
+    &.input {
+      left: 0;
+    }
+
+    &.output {
+      left: 0; // Changed from right: 0 to left: 0 so port positioning works correctly
+    }
+  }
+}

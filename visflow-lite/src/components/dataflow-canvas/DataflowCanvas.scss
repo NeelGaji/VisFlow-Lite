@@ -4,12 +4,26 @@
   position: relative;
   overflow: hidden;
 
-  svg {
+  .edges-layer {
     position: absolute;
     width: 100%;
     height: 100%;
     top: 0;
     left: 0;
+    z-index: 0; // Behind nodes
+    pointer-events: none;
+  }
+
+  .nodes-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    z-index: 1; // Above SVG
+    pointer-events: none; // Let events pass through empty space
+    
+    > * {
+      pointer-events: auto; // But catch events on actual nodes
+    }
   }
 
   &.panning {
@@ -18,6 +32,15 @@
 
   &.selecting {
     cursor: crosshair;
+  }
+
+  &.dragging-nodes {
+    cursor: move;
+  }
+
+  &.drop-target {
+    background-color: rgba(76, 175, 80, 0.05);
+    box-shadow: inset 0 0 20px rgba(76, 175, 80, 0.2);
   }
 }
 
