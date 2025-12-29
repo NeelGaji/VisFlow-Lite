@@ -1,0 +1,105 @@
+.version-tree-panel {
+  position: fixed;
+  top: 0;
+  right: 300px; // Offset by workflow panel width
+  height: 100vh;
+  width: 500px; // Wider for better SVG viewing
+  background: #fff;
+  border-left: 1px solid #dee2e6;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid #dee2e6;
+    background: #f8f9fa;
+
+    h3 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #212529;
+    }
+
+    .btn-close-panel {
+      background: none;
+      border: none;
+      padding: 0.25rem 0.5rem;
+      cursor: pointer;
+      color: #6c757d;
+      transition: color 0.2s;
+
+      &:hover {
+        color: #212529;
+      }
+
+      i {
+        font-size: 1rem;
+      }
+    }
+  }
+
+  .loading-state,
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    color: #6c757d;
+    gap: 0.5rem;
+
+    i {
+      font-size: 3rem;
+      opacity: 0.3;
+    }
+
+    p {
+      margin: 0;
+      font-size: 0.875rem;
+    }
+  }
+
+  .alert {
+    margin: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .svg-container {
+    flex: 1;
+    overflow: auto;
+    padding: 1rem;
+    background: #f8f9fa;
+
+    :deep(svg) {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+    }
+  }
+}
+
+// Transition animations
+.slide-fade-left-enter-active,
+.slide-fade-left-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-fade-left-enter-from {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.slide-fade-left-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
+}

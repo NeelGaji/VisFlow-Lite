@@ -1,0 +1,27 @@
+.workflow-panel {
+  position: fixed;
+  top: var(--header-height, 56px);
+  right: 0;
+  bottom: 0;
+  width: 300px;
+  background-color: white;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+  overflow-y: auto;
+  z-index: 100;
+}
+
+// Slide animation from right
+.slide-fade-right-enter-active,
+.slide-fade-right-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-fade-right-enter-from {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.slide-fade-right-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
+}

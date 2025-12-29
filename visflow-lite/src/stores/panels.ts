@@ -7,6 +7,9 @@ export const usePanelsStore = defineStore('panels', () => {
   const quickNodePanelVisible = ref(false)
   const historyPanelVisible = ref(false)
   const logPanelVisible = ref(false)
+  const workflowPanelVisible = ref(true)
+  const versionTreePanelVisible = ref(false)
+  const selectedWorkflowForVersionTree = ref<string | null>(null)
 
   // Actions
   function toggleNodePanel() {
@@ -37,12 +40,29 @@ export const usePanelsStore = defineStore('panels', () => {
     logPanelVisible.value = false
   }
 
+  function toggleWorkflowPanel() {
+    workflowPanelVisible.value = !workflowPanelVisible.value
+  }
+
+  function openVersionTreePanel(workflowId: string) {
+    selectedWorkflowForVersionTree.value = workflowId
+    versionTreePanelVisible.value = true
+  }
+
+  function closeVersionTreePanel() {
+    versionTreePanelVisible.value = false
+    selectedWorkflowForVersionTree.value = null
+  }
+
   return {
     // State
     nodePanelVisible,
     quickNodePanelVisible,
     historyPanelVisible,
     logPanelVisible,
+    workflowPanelVisible,
+    versionTreePanelVisible,
+    selectedWorkflowForVersionTree,
     // Actions
     toggleNodePanel,
     openQuickNodePanel,
@@ -51,5 +71,8 @@ export const usePanelsStore = defineStore('panels', () => {
     closeHistoryPanel,
     openLogPanel,
     closeLogPanel,
+    toggleWorkflowPanel,
+    openVersionTreePanel,
+    closeVersionTreePanel,
   }
 })
