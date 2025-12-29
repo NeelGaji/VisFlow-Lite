@@ -9,10 +9,17 @@ interface EdgeProps {
 
 export function useEdge(props: EdgeProps) {
   const dataflowStore = useDataflowStore()
-  const { nodes } = storeToRefs(dataflowStore)
+  const { nodes, selectedEdgeId } = storeToRefs(dataflowStore)
+  const { selectEdge } = dataflowStore
 
   // State
-  const isSelected = computed(() => false) // TODO: implement edge selection
+  const isSelected = computed(() => selectedEdgeId.value === props.edgeData.id)
+
+  // Handle edge click
+  function onEdgeClick(event: MouseEvent) {
+    event.stopPropagation()
+    selectEdge(props.edgeData.id)
+  }
 
   // Get port element by searching in DOM
   function getPortElement(nodeId: string, portId: string): HTMLElement | null {
@@ -81,5 +88,6 @@ export function useEdge(props: EdgeProps) {
     pathData,
     strokeColor,
     isSelected,
+    onEdgeClick,
   }
 }

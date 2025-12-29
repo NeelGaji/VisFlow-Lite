@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import { useDataflowStore } from '@/stores/dataflow'
 
 // Constants
 const PORT_SIZE = 15 // pixels - matches original PORT_SIZE_PX
@@ -28,6 +29,7 @@ interface NodeProps {
 
 export function useNode(props: NodeProps) {
   const nodeElement = ref<HTMLElement | null>(null)
+  const dataflowStore = useDataflowStore()
 
   // Computed properties
   const actualWidth = computed(() => {
@@ -80,6 +82,9 @@ export function useNode(props: NodeProps) {
 
   // Event handlers
   function onMouseDown(event: MouseEvent) {
+    // Select this node on click
+    dataflowStore.selectNode(props.id)
+
     // Node dragging will be handled by the canvas
     // Don't stop propagation - let the canvas handle it
   }

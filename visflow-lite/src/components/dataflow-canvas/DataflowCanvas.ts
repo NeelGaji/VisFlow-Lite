@@ -2,6 +2,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useInteractionStore, type Point } from '@/stores/interaction'
 import { useDataflowStore } from '@/stores/dataflow'
+import { useHistoryStore } from '@/stores/history'
 import type { NodeData } from '@/stores/dataflow/types'
 
 enum DragMode {
@@ -27,6 +28,7 @@ export function useDataflowCanvas() {
   // Stores
   const interactionStore = useInteractionStore()
   const dataflowStore = useDataflowStore()
+  const historyStore = useHistoryStore()
   const { mousePosition, isShiftPressed } = storeToRefs(interactionStore)
   const { nodes: canvasNodes, edges: canvasEdges, edgeBeingCreated } = storeToRefs(dataflowStore)
   const { trackMouseMove, setShiftPressed } = interactionStore
@@ -119,6 +121,13 @@ export function useDataflowCanvas() {
   function onKeyDown(event: KeyboardEvent) {
     if (event.key === 'Shift') {
       setShiftPressed(true)
+    } else if (event.key === 'Delete' || event.key === 'Backspace') {
+      // Delete selected edge
+      if (dataflowStore.selectedEdgeId) {
+        dataflowStore.removeEdge(dataflowStore.selectedEdgeId)
+        dataflowStore.selectEdge(null)
+        event.preventDefault()
+      }
     }
   }
 
@@ -200,6 +209,34 @@ export function useDataflowCanvas() {
       // TODO: Select nodes in box (when we have nodes)
       console.log('Selection box:', selectBox.value)
     } else if (dragMode.value === DragMode.NODE_DRAG) {
+      // Check if any nodes actually moved
+      let hasMoved = false
+      const movedNodeLabels: string[] = []
+
+      nodeStartPositions.value.forEach((startPos, nodeId) => {
+        const node = canvasNodes.value.find(n => n.id === nodeId)
+        if (node && (node.x !== startPos.x || node.y !== startPos.y)) {
+          hasMoved = true
+          movedNodeLabels.push(node.label || node.type)
+        }
+      })
+
+      // Add to history if nodes actually moved
+      if (hasMoved) {
+        const description = movedNodeLabels.length === 1
+          ? `Moved ${movedNodeLabels[0]} node`
+          : `Moved ${movedNodeLabels.length} nodes`
+
+        historyStore.addEntry('move-node', description, {
+          nodes: JSON.parse(JSON.stringify(canvasNodes.value)),
+          edges: JSON.parse(JSON.stringify(canvasEdges.value)),
+          diagramOffset: {
+            x: dataflowStore.diagramOffsetX,
+            y: dataflowStore.diagramOffsetY,
+          },
+        })
+      }
+
       // Clear node drag state
       draggedNodeIds.value.clear()
       nodeStartPositions.value.clear()

@@ -2,6 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { nodeTypes, type NodeType } from './nodeTypes'
 import type { NodeData, EdgeData, EdgeCreationData } from './types'
+import { useHistoryStore } from '../history'
 
 export const useDataflowStore = defineStore('dataflow', () => {
   // State
@@ -11,11 +12,36 @@ export const useDataflowStore = defineStore('dataflow', () => {
   const edges = ref<EdgeData[]>([])
   const edgeBeingCreated = ref<EdgeCreationData | null>(null)
   const canvas = ref<any>(null) // Reference to DataflowCanvas component
+  const selectedNodeId = ref<string | null>(null)
+  const selectedEdgeId = ref<string | null>(null)
 
   // Getters
   const availableNodeTypes = computed(() => {
     return nodeTypes
   })
+
+  const diagramOffset = computed(() => ({
+    x: diagramOffsetX.value,
+    y: diagramOffsetY.value,
+  }))
+
+  // Helper function to capture current state
+  function captureState() {
+    return {
+      nodes: JSON.parse(JSON.stringify(nodes.value)),
+      edges: JSON.parse(JSON.stringify(edges.value)),
+      diagramOffset: {
+        x: diagramOffsetX.value,
+        y: diagramOffsetY.value,
+      },
+    }
+  }
+
+  // Helper function to add history entry
+  function addToHistory(action: string, description: string) {
+    const historyStore = useHistoryStore()
+    historyStore.addEntry(action, description, captureState())
+  }
 
   // Actions
   function moveDiagram(dx: number, dy: number) {
@@ -41,11 +67,32 @@ export const useDataflowStore = defineStore('dataflow', () => {
       isSelected: false,
       isActive: false,
     }
+
+    // Initialize type-specific fields
+    if (type === 'script-editor') {
+      node.code = `(input, content, state) => {
+  // Process input table(s) and return output table
+  // input: single table object or array of table objects
+  // content: HTML element for rendering (if enabled)
+  // state: persistent state object (if enabled)
+
+  return {
+    columns: [],
+    rows: [],
+  };
+};
+`
+      node.isRenderingEnabled = false
+      node.isStateEnabled = false
+    }
+
     nodes.value.push(node)
+    addToHistory('create-node', `Created ${nodeType?.title || type} node`)
     return node
   }
 
   function removeNode(nodeId: string) {
+    const node = nodes.value.find((n) => n.id === nodeId)
     const index = nodes.value.findIndex((n) => n.id === nodeId)
     if (index !== -1) {
       nodes.value.splice(index, 1)
@@ -54,6 +101,9 @@ export const useDataflowStore = defineStore('dataflow', () => {
     edges.value = edges.value.filter(
       (edge) => edge.sourceNodeId !== nodeId && edge.targetNodeId !== nodeId
     )
+    if (node) {
+      addToHistory('delete-node', `Deleted ${node.label || node.type} node`)
+    }
   }
 
   function createEdge(
@@ -82,6 +132,7 @@ export const useDataflowStore = defineStore('dataflow', () => {
       targetPortId,
     }
     edges.value.push(edge)
+    addToHistory('create-edge', 'Created connection')
     return edge
   }
 
@@ -89,6 +140,7 @@ export const useDataflowStore = defineStore('dataflow', () => {
     const index = edges.value.findIndex((e) => e.id === edgeId)
     if (index !== -1) {
       edges.value.splice(index, 1)
+      addToHistory('delete-edge', 'Deleted connection')
     }
   }
 
@@ -255,16 +307,54 @@ export const useDataflowStore = defineStore('dataflow', () => {
     edges.value = []
   }
 
+  function selectNode(nodeId: string | null) {
+    // Deselect all nodes
+    nodes.value.forEach(node => {
+      node.isSelected = false
+    })
+
+    // Select the specified node
+    if (nodeId) {
+      const node = nodes.value.find(n => n.id === nodeId)
+      if (node) {
+        node.isSelected = true
+      }
+    }
+
+    selectedNodeId.value = nodeId
+  }
+
+  function updateNode(nodeId: string, updates: Partial<NodeData>) {
+    const node = nodes.value.find(n => n.id === nodeId)
+    if (node) {
+      Object.assign(node, updates)
+    }
+  }
+
+  function selectEdge(edgeId: string | null) {
+    // Deselect all nodes when selecting an edge
+    if (edgeId) {
+      nodes.value.forEach(node => {
+        node.isSelected = false
+      })
+      selectedNodeId.value = null
+    }
+    selectedEdgeId.value = edgeId
+  }
+
   return {
     // State
     diagramOffsetX,
-        diagramOffsetY,
+    diagramOffsetY,
     nodes,
     edges,
     edgeBeingCreated,
     canvas,
+    selectedNodeId,
+    selectedEdgeId,
     // Getters
     availableNodeTypes,
+    diagramOffset,
     // Actions
     moveDiagram,
     setCanvas,
@@ -277,5 +367,8 @@ export const useDataflowStore = defineStore('dataflow', () => {
     cancelEdgeCreation,
     loadWorkflow,
     clearWorkflow,
+    selectNode,
+    selectEdge,
+    updateNode,
   }
 })

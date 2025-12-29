@@ -10,6 +10,19 @@ export interface NodeData {
   isIconized?: boolean
   isSelected?: boolean
   isActive?: boolean
+  isLabelVisible?: boolean
+  // Script editor specific properties
+  code?: string
+  isRenderingEnabled?: boolean
+  isStateEnabled?: boolean
+  state?: Record<string, any>
+  displayTitle?: string
+  transparentBackground?: boolean
+  // Data properties
+  dataset?: any // Will hold the processed data
+  executionError?: string
+  warningMessage?: string
+  successMessage?: string
 }
 
 // Edge data interface

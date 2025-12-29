@@ -1,0 +1,35 @@
+.editable-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+
+  span {
+    outline: none;
+    padding: 0.125rem 0.25rem;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+
+    &[contenteditable="true"] {
+      background-color: #f8f9fa;
+      border: 1px solid #dee2e6;
+      cursor: text;
+    }
+
+    &:hover:not([contenteditable="true"]) {
+      background-color: #f8f9fa;
+    }
+  }
+
+  .edit-icon {
+    font-size: 0.75rem;
+    color: #6c757d;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+
+    &:hover {
+      opacity: 1;
+    }
+  }
+}
