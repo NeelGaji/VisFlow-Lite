@@ -40,6 +40,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: string]
   'change': [newValue: string, oldValue: string]
   'run': []
+  'close': []
 }>()
 
 const {

@@ -11,6 +11,7 @@ export interface CodeEditorModalEmits {
   (event: 'update:modelValue', value: string): void
   (event: 'change', newValue: string, oldValue: string): void
   (event: 'run'): void
+  (event: 'close'): void
 }
 
 export const useCodeEditorModal = (
@@ -23,8 +24,19 @@ export const useCodeEditorModal = (
   let currentCode = props.modelValue
   let codeBeforeOpen = ''
 
-  // Initialize Monaco
+  // Initialize Monaco with worker configuration
   loader.config({ monaco })
+
+  // Configure Monaco environment for web workers
+  if (typeof window !== 'undefined') {
+    (window as any).MonacoEnvironment = {
+      getWorker(_: any, _label: string) {
+        // For now, return undefined to use fallback mode
+        // This avoids the web worker errors while maintaining functionality
+        return undefined
+      }
+    }
+  }
 
   const createEditor = async () => {
     if (!editorContainer.value) return
@@ -79,6 +91,7 @@ export const useCodeEditorModal = (
   const close = () => {
     console.log('CodeEditorModal: close() called')
     isVisible.value = false
+    emit('close')
   }
 
   const save = () => {
@@ -113,6 +126,12 @@ export const useCodeEditorModal = (
         editor.setValue(newValue)
       }
     }
+  })
+
+  // Auto-open when component is mounted
+  onMounted(() => {
+    console.log('CodeEditorModal: onMounted, auto-opening modal')
+    open()
   })
 
   // Cleanup

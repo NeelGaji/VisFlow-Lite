@@ -5,22 +5,12 @@
   import VersionTreePanel from './components/version-tree-panel/VersionTreePanel.vue'
   import HistoryPanel from './components/history-panel/HistoryPanel.vue'
   import DataflowCanvas from './components/dataflow-canvas/DataflowCanvas.vue'
-  import ScriptEditorPanel from './components/script-editor-panel/ScriptEditorPanel.vue'
+  import NodePropertiesPanel from './components/node-properties-panel/NodePropertiesPanel.vue'
   import { useDataflowStore } from './stores/dataflow'
   import { storeToRefs } from 'pinia'
-  import { computed } from 'vue'
 
   const dataflowStore = useDataflowStore()
-  const { selectedNodeId, nodes } = storeToRefs(dataflowStore)
-
-  const selectedNode = computed(() => {
-    if (!selectedNodeId.value) return null
-    return nodes.value.find(n => n.id === selectedNodeId.value)
-  })
-
-  const isScriptEditorSelected = computed(() => {
-    return selectedNode.value?.type === 'script-editor'
-  })
+  const { selectedNodeId } = storeToRefs(dataflowStore)
 </script>
 
 <template>
@@ -32,8 +22,8 @@
       <VersionTreePanel />
       <HistoryPanel />
       <DataflowCanvas />
-      <div v-if="isScriptEditorSelected" class="right-panel">
-        <ScriptEditorPanel />
+      <div v-if="selectedNodeId" class="right-panel">
+        <NodePropertiesPanel />
       </div>
     </div>
   </div>
