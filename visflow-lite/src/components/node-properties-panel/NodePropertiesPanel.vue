@@ -65,8 +65,25 @@
         </div>
       </div>
 
-      <!-- Regular Parameters (excluding source) -->
-      <div class="info-group" v-if="hasNonSourceParameters">
+      <!-- Editable Parameters -->
+      <div class="info-group" v-if="editableParameters.length > 0">
+        <h4>Parameters</h4>
+        <div class="param-list">
+          <div v-for="param in editableParameters" :key="param.name" class="param-item editable">
+            <label class="param-label">{{ param.name }}</label>
+            <input
+              type="text"
+              class="param-input"
+              :value="param.value"
+              @change="updateParameter(param.name, ($event.target as HTMLInputElement).value)"
+            />
+            <span class="param-type">{{ param.typeLabel }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Regular Parameters (excluding source, read-only) -->
+      <div class="info-group" v-if="hasNonSourceParameters && editableParameters.length === 0">
         <h4>Parameters</h4>
         <div class="param-list">
           <div v-for="(value, key) in nonSourceParameters" :key="key" class="param-item">
@@ -112,7 +129,7 @@ import ScriptEditorPanel from '../script-editor-panel/ScriptEditorPanel.vue'
 import CodeEditorModal from '../code-editor-modal/CodeEditorModal.vue'
 
 const dataflowStore = useDataflowStore()
-const { selectedNodeId, nodes } = storeToRefs(dataflowStore)
+const { selectedNodeId, nodes, moduleRegistry } = storeToRefs(dataflowStore)
 
 const showCodeModal = ref(false)
 const sourceCode = ref('')
@@ -122,6 +139,52 @@ const nodeData = computed(() => {
   if (!selectedNodeId.value) return null
   return nodes.value.find(n => n.id === selectedNodeId.value)
 })
+
+// Define known parameter names for modules (just the parameter names, types are hints)
+const PARAMETER_DEFINITIONS: Record<string, Array<{name: string, type: string}>> = {
+  'org.vistrails.vistrails.basic::Integer': [{ name: 'value', type: 'Int64' }],
+  'org.vistrails.vistrails.basic::Float': [{ name: 'value', type: 'Float64' }],
+  'org.vistrails.vistrails.basic::String': [{ name: 'value', type: 'String' }],
+  'org.vistrails.vistrails.basic::Boolean': [{ name: 'value', type: 'Bool' }],
+  'org.vistrails.vistrails.basic::List': [{ name: 'value', type: 'Vector' }],
+  'org.vistrails.vistrails.basic::Tuple': [{ name: 'value', type: 'Tuple' }],
+  'org.vistrails.vistrails.pythoncalc::PythonCalc': [
+    { name: 'op', type: 'String (+,-,*,/)' },
+    { name: 'expression', type: 'String' }
+  ],
+}
+
+// Get editable parameters for the current node
+const editableParameters = computed(() => {
+  if (!nodeData.value) return []
+
+  const moduleType = nodeData.value.backendModuleType || nodeData.value.type
+  const paramDefs = PARAMETER_DEFINITIONS[moduleType]
+
+  if (!paramDefs) return []
+
+  return paramDefs.map(def => {
+    const currentValue = nodeData.value?.parameters?.[def.name] ?? ''
+    return {
+      name: def.name,
+      value: currentValue,
+      typeLabel: def.type
+    }
+  })
+})
+
+// Update a parameter value - send as string, let backend/Julia handle conversion
+async function updateParameter(name: string, value: string) {
+  if (!nodeData.value) return
+
+  console.log('Updating parameter:', name, '=', value)
+
+  try {
+    await dataflowStore.updateNodeParameters(nodeData.value.id, { [name]: value })
+  } catch (error) {
+    console.error('Failed to update parameter:', error)
+  }
+}
 
 // Check if this module has a source code parameter
 // Common parameter names for source code (case-insensitive matching)
@@ -396,6 +459,39 @@ function viewSourceCode() {
     color: #333;
     font-family: monospace;
     word-break: break-all;
+  }
+
+  &.editable {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    .param-label {
+      font-weight: 500;
+      color: #555;
+      font-size: 12px;
+    }
+
+    .param-input {
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: monospace;
+
+      &:focus {
+        outline: none;
+        border-color: #2196F3;
+        box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+      }
+    }
+
+    .param-type {
+      font-size: 11px;
+      color: #888;
+      font-family: monospace;
+    }
   }
 }
 

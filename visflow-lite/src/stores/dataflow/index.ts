@@ -93,6 +93,12 @@ export const useDataflowStore = defineStore('dataflow', () => {
     // Check if this is a backend module type (contains ::)
     const isBackendModule = type.includes('::')
 
+    // Auto-create workflow if needed for backend modules
+    if (isBackendModule && !currentWorkflowId.value) {
+      console.log('No workflow set, creating new workflow...')
+      await createNewWorkflow()
+    }
+
     if (isBackendModule && currentWorkflowId.value) {
       // Create node via backend API
       try {
@@ -104,6 +110,8 @@ export const useDataflowStore = defineStore('dataflow', () => {
 
         // Get module info from registry
         const backendModule = moduleRegistry.value.get(type)
+        console.log('Backend module from registry:', type, backendModule)
+        console.log('Registry size:', moduleRegistry.value.size)
 
         // Create frontend node with backend data
         const node: NodeData = {
@@ -193,6 +201,35 @@ export const useDataflowStore = defineStore('dataflow', () => {
     )
     if (node) {
       addToHistory('delete-node', `Deleted ${node.label || node.type} node`)
+    }
+  }
+
+  async function updateNodeParameters(nodeId: string, parameters: Record<string, any>) {
+    const node = nodes.value.find((n) => n.id === nodeId)
+    if (!node) {
+      console.error('Node not found:', nodeId)
+      return
+    }
+
+    // Update local state
+    if (!node.parameters) {
+      node.parameters = {}
+    }
+    Object.assign(node.parameters, parameters)
+
+    // If this is a backend node, update the backend
+    if (node.backendModuleId && currentWorkflowId.value) {
+      try {
+        await api.updateModuleParameters(
+          currentWorkflowId.value,
+          node.backendModuleId,
+          parameters
+        )
+        console.log('Updated backend parameters for module', node.backendModuleId)
+      } catch (error) {
+        console.error('Failed to update backend parameters:', error)
+        throw error
+      }
     }
   }
 
@@ -673,5 +710,6 @@ export const useDataflowStore = defineStore('dataflow', () => {
     // Backend integration actions
     loadAvailableModules,
     createNewWorkflow,
+    updateNodeParameters,
   }
 })

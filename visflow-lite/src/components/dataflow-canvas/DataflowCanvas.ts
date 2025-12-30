@@ -154,6 +154,14 @@ export function useDataflowCanvas() {
         dataflowStore.selectEdge(null)
         event.preventDefault()
       }
+      // Delete selected nodes
+      const selectedNodes = dataflowStore.nodes.filter(n => n.isSelected)
+      if (selectedNodes.length > 0) {
+        selectedNodes.forEach(node => {
+          dataflowStore.removeNode(node.id)
+        })
+        event.preventDefault()
+      }
     }
   }
 

@@ -1,6 +1,6 @@
 # CLAUDE.md - AI Assistant Context
 
-Last Updated: 2025-12-29 (Port ID Mismatch Fixed)
+Last Updated: 2025-12-30 (Parameter Editing & Node Deletion)
 
 ## Project Overview
 
@@ -474,6 +474,64 @@ Fixed critical issue where manually created nodes and backend-loaded nodes used 
 
 ---
 
+## Recent Additions (2025-12-30)
+
+### Node Deletion Support
+Added keyboard shortcut to delete selected nodes.
+
+**Changes ([DataflowCanvas.ts](visflow-lite/src/components/dataflow-canvas/DataflowCanvas.ts)):**
+- Delete/Backspace now deletes selected nodes (in addition to edges)
+- Multiple selected nodes can be deleted at once
+
+### Module Parameter Editing
+Complete implementation of editable parameters in the NodePropertiesPanel.
+
+**Frontend Changes:**
+
+1. **[NodePropertiesPanel.vue](visflow-lite/src/components/node-properties-panel/NodePropertiesPanel.vue)**
+   - Added editable input fields for module parameters
+   - Parameter definitions for basic modules: Integer, Float, String, Boolean, List, Tuple
+   - Parameter definitions for PythonCalc: `op` and `expression`
+   - Parameters sent as strings - Julia backend handles type conversion
+   - CSS styling for editable parameter inputs
+
+2. **[api.ts](visflow-lite/src/services/api.ts)**
+   - Added `updateModuleParameters()` function
+   - PATCH request to `/api/workflow/{id}/module/{id}/parameters`
+
+3. **[dataflow/index.ts](visflow-lite/src/stores/dataflow/index.ts)**
+   - Added `updateNodeParameters()` store action
+   - Updates local node state and syncs with backend
+   - Auto-creates workflow if none exists when creating backend modules
+
+**Backend Changes (VisTrailsJL):**
+
+1. **[http_server.jl](../VisTrailsJL/julia/backend/http_server.jl)**
+   - Added PATCH endpoint: `/api/workflow/*/module/*/parameters`
+   - Added PATCH to CORS allowed methods
+   - Added OPTIONS handlers for new endpoints
+
+### CORS Configuration
+Fixed CORS issues for frontend-backend communication.
+
+**Changes:**
+- Added `PATCH` to `Access-Control-Allow-Methods`
+- Added explicit OPTIONS handlers for all API endpoints
+- Parameters endpoint: `/api/workflow/*/module/*/parameters`
+
+### Current Working Features
+- ✅ Module loading from backend (30 modules)
+- ✅ Auto-workflow creation when dragging modules
+- ✅ Module creation via backend API
+- ✅ Port display with correct names
+- ✅ Edge/connection creation
+- ✅ Node selection and deletion (Delete/Backspace)
+- ✅ Edge selection and deletion
+- ✅ Parameter editing for basic modules (Integer, Float, String, Boolean, List, Tuple)
+- ✅ Parameter editing for PythonCalc (op, expression)
+
+---
+
 ## Notes for Future Sessions
 
 - The application is in active development
@@ -481,8 +539,14 @@ Fixed critical issue where manually created nodes and backend-loaded nodes used 
 - Script editor node is fully functional with execution engine
 - History panel is fully functional with undo/redo
 - **Port system is now unified** - all nodes use proper port specifications
+- **Parameter editing works** - values sent as strings, Julia handles conversion
 - Many planned features have store infrastructure but no UI
 - Code is clean and well-organized
 - TypeScript types are properly defined
 - No apparent security concerns in codebase
 - Script execution uses `new Function()` for sandboxed execution
+
+### Backend Location
+- Julia backend: `/Users/csilva/github/VisTrailsJL/julia/backend/`
+- Start command: `cd julia/backend && PORT=8000 julia --project=. http_server.jl`
+- Must run `julia --project=. -e "using Pkg; Pkg.instantiate()"` first for fresh installs

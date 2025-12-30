@@ -178,3 +178,24 @@ export async function deleteConnection(
   }
   return response.json()
 }
+
+/**
+ * Update a module's parameters
+ */
+export async function updateModuleParameters(
+  workflowId: string,
+  moduleId: number,
+  parameters: Record<string, any>
+): Promise<{ success: boolean; module_id: number; parameters: Record<string, any> }> {
+  const response = await fetch(`${API_BASE}/workflow/${workflowId}/module/${moduleId}/parameters`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(parameters)
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.message || `Failed to update parameters: ${response.statusText}`)
+  }
+  return response.json()
+}
