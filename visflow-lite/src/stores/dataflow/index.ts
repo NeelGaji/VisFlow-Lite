@@ -1,8 +1,9 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { nodeTypes, type NodeType } from './nodeTypes'
-import type { NodeData, EdgeData, EdgeCreationData } from './types'
+import type { NodeData, EdgeData, EdgeCreationData, BackendModule } from './types'
 import { useHistoryStore } from '../history'
+import * as api from '@/services/api'
 
 export const useDataflowStore = defineStore('dataflow', () => {
   // State
@@ -17,6 +18,13 @@ export const useDataflowStore = defineStore('dataflow', () => {
   const selectedEdgeId = ref<string | null>(null)
   const backendSvgContent = ref<string | null>(null) // Backend SVG for overlay comparison
   const showBackendOverlay = ref(false) // Toggle for showing backend SVG overlay
+
+  // Backend integration state
+  const currentWorkflowId = ref<string | null>(null)
+  const currentWorkflowName = ref<string | null>(null)
+  const availableModules = ref<BackendModule[]>([])
+  const moduleRegistry = ref<Map<string, BackendModule>>(new Map())
+  const isLoadingModules = ref(false)
 
   // Getters
   const availableNodeTypes = computed(() => {
@@ -81,27 +89,77 @@ export const useDataflowStore = defineStore('dataflow', () => {
     canvas.value = canvasInstance
   }
 
-  function createNode(type: string, x: number, y: number) {
-    const nodeType = nodeTypes.find(nt => nt.id === type)
-    const node: NodeData = {
-      id: `node-${Date.now()}-${Math.random()}`,
-      type,
-      x,
-      y,
-      label: nodeType?.title || type,
-      width: 120,  // VisTrails default module width
-      height: 60,  // VisTrails default module height
-      isIconized: false,
-      isSelected: false,
-      isActive: false,
-      // Add default port specifications from node type registry
-      inputs: nodeType?.defaultInputs || [],
-      outputs: nodeType?.defaultOutputs || [],
-    }
+  async function createNode(type: string, x: number, y: number) {
+    // Check if this is a backend module type (contains ::)
+    const isBackendModule = type.includes('::')
 
-    // Initialize type-specific fields
-    if (type === 'script-editor') {
-      node.code = `(input, content, state) => {
+    if (isBackendModule && currentWorkflowId.value) {
+      // Create node via backend API
+      try {
+        const response = await api.addModuleToWorkflow(
+          currentWorkflowId.value,
+          type,
+          { x, y }
+        )
+
+        // Get module info from registry
+        const backendModule = moduleRegistry.value.get(type)
+
+        // Create frontend node with backend data
+        const node: NodeData = {
+          id: `node-${response.module_id}`,
+          type,
+          x,
+          y,
+          label: backendModule?.name || type.split('::')[1],
+          width: 120,
+          height: 60,
+          isIconized: false,
+          isSelected: false,
+          isActive: false,
+          // Use backend port specifications
+          inputs: backendModule?.input_ports.map(p => ({
+            name: p.name,
+            type: p.type,
+            optional: p.optional
+          })) || [],
+          outputs: backendModule?.output_ports.map(p => ({
+            name: p.name,
+            type: p.type
+          })) || [],
+          // Store backend IDs for future operations
+          backendModuleId: response.module_id,
+          backendModuleType: type,
+        }
+
+        nodes.value.push(node)
+        addToHistory('create-node', `Created ${node.label} module`)
+        return node
+      } catch (error) {
+        console.error('Failed to create backend module:', error)
+        throw error
+      }
+    } else {
+      // Legacy: Create local-only node (for old node types or no workflow)
+      const nodeType = nodeTypes.find(nt => nt.id === type)
+      const node: NodeData = {
+        id: `node-${Date.now()}-${Math.random()}`,
+        type,
+        x,
+        y,
+        label: nodeType?.title || type,
+        width: 120,
+        height: 60,
+        isIconized: false,
+        isSelected: false,
+        isActive: false,
+        inputs: nodeType?.defaultInputs || [],
+        outputs: nodeType?.defaultOutputs || [],
+      }
+
+      // Initialize type-specific fields
+      if (type === 'script-editor') {
+        node.code = `(input, content, state) => {
   // Process input table(s) and return output table
   // input: single table object or array of table objects
   // content: HTML element for rendering (if enabled)
@@ -113,13 +171,14 @@ export const useDataflowStore = defineStore('dataflow', () => {
   };
 };
 `
-      node.isRenderingEnabled = false
-      node.isStateEnabled = false
-    }
+        node.isRenderingEnabled = false
+        node.isStateEnabled = false
+      }
 
-    nodes.value.push(node)
-    addToHistory('create-node', `Created ${nodeType?.title || type} node`)
-    return node
+      nodes.value.push(node)
+      addToHistory('create-node', `Created ${nodeType?.title || type} node`)
+      return node
+    }
   }
 
   function removeNode(nodeId: string) {
@@ -137,7 +196,7 @@ export const useDataflowStore = defineStore('dataflow', () => {
     }
   }
 
-  function createEdge(
+  async function createEdge(
     sourceNodeId: string,
     sourcePortId: string,
     targetNodeId: string,
@@ -155,16 +214,54 @@ export const useDataflowStore = defineStore('dataflow', () => {
       return null
     }
 
-    const edge: EdgeData = {
-      id: `edge-${Date.now()}-${Math.random()}`,
-      sourceNodeId,
-      sourcePortId,
-      targetNodeId,
-      targetPortId,
+    // Find source and target nodes
+    const sourceNode = nodes.value.find(n => n.id === sourceNodeId)
+    const targetNode = nodes.value.find(n => n.id === targetNodeId)
+
+    // Check if both nodes are backend modules
+    const isBackendConnection = sourceNode?.backendModuleId && targetNode?.backendModuleId && currentWorkflowId.value
+
+    if (isBackendConnection) {
+      // Create connection via backend API
+      try {
+        const response = await api.createConnection(
+          currentWorkflowId.value!,
+          sourceNode!.backendModuleId!,
+          sourcePortId,
+          targetNode!.backendModuleId!,
+          targetPortId
+        )
+
+        // Create frontend edge with backend connection ID
+        const edge: EdgeData = {
+          id: `edge-${response.connection_id}`,
+          sourceNodeId,
+          sourcePortId,
+          targetNodeId,
+          targetPortId,
+          backendConnectionId: response.connection_id,
+        }
+
+        edges.value.push(edge)
+        addToHistory('create-edge', 'Created connection')
+        return edge
+      } catch (error) {
+        console.error('Failed to create backend connection:', error)
+        throw error
+      }
+    } else {
+      // Legacy: Create local-only edge
+      const edge: EdgeData = {
+        id: `edge-${Date.now()}-${Math.random()}`,
+        sourceNodeId,
+        sourcePortId,
+        targetNodeId,
+        targetPortId,
+      }
+      edges.value.push(edge)
+      addToHistory('create-edge', 'Created connection')
+      return edge
     }
-    edges.value.push(edge)
-    addToHistory('create-edge', 'Created connection')
-    return edge
   }
 
   function removeEdge(edgeId: string) {
@@ -180,12 +277,12 @@ export const useDataflowStore = defineStore('dataflow', () => {
     edgeBeingCreated.value = data
   }
 
-  function completeEdgeCreation(
+  async function completeEdgeCreation(
     targetNodeId: string,
     targetPortId: string
-  ): EdgeData | null {
+  ): Promise<EdgeData | null> {
     console.log('Store: completeEdgeCreation', { targetNodeId, targetPortId, edgeBeingCreated: edgeBeingCreated.value })
-    
+
     if (!edgeBeingCreated.value) {
       console.log('Store: No edge being created!')
       return null
@@ -216,12 +313,18 @@ export const useDataflowStore = defineStore('dataflow', () => {
     console.log('Store: Creating edge', { finalSourceNodeId, finalSourcePortId, finalTargetNodeId, finalTargetPortId })
 
     edgeBeingCreated.value = null
-    return createEdge(
-      finalSourceNodeId,
-      finalSourcePortId,
-      finalTargetNodeId,
-      finalTargetPortId
-    )
+
+    try {
+      return await createEdge(
+        finalSourceNodeId,
+        finalSourcePortId,
+        finalTargetNodeId,
+        finalTargetPortId
+      )
+    } catch (error) {
+      console.error('Failed to complete edge creation:', error)
+      return null
+    }
   }
 
   function cancelEdgeCreation() {
@@ -238,6 +341,8 @@ export const useDataflowStore = defineStore('dataflow', () => {
       y: number
       inputs: Array<{ name: string; type: string }>
       outputs: Array<{ name: string; type: string }>
+      parameters?: Record<string, any>
+      annotations?: Record<string, any>
     }>
     connections: Array<{
       id: number
@@ -358,6 +463,10 @@ export const useDataflowStore = defineStore('dataflow', () => {
         // Use inferred ports from connections (workaround for backend bug)
         inputs: inputs,
         outputs: outputs,
+        // Store parameters and annotations from backend
+        parameters: module.parameters || {},
+        annotations: module.annotations || {},
+        package: module.package,
       }
 
       console.log(`[loadWorkflow] Created node data for ${nodeData.id}:`, {
@@ -478,6 +587,48 @@ export const useDataflowStore = defineStore('dataflow', () => {
     showBackendOverlay.value = !showBackendOverlay.value
   }
 
+  // Backend Integration Functions
+  async function loadAvailableModules() {
+    try {
+      isLoadingModules.value = true
+      const data = await api.fetchModules()
+      availableModules.value = data.modules
+
+      // Build registry for quick lookup
+      moduleRegistry.value.clear()
+      data.modules.forEach((mod: BackendModule) => {
+        moduleRegistry.value.set(mod.type, mod)
+      })
+
+      console.log(`Loaded ${data.modules.length} modules from backend`)
+    } catch (error) {
+      console.error('Failed to load modules from backend:', error)
+      throw error
+    } finally {
+      isLoadingModules.value = false
+    }
+  }
+
+  async function createNewWorkflow(name?: string) {
+    try {
+      const data = await api.createWorkflow(name)
+      currentWorkflowId.value = data.workflow_id
+      currentWorkflowName.value = data.name
+
+      // Clear canvas
+      nodes.value = []
+      edges.value = []
+      selectedNodeId.value = null
+      selectedEdgeId.value = null
+
+      console.log(`Created new workflow: ${data.name} (ID: ${data.workflow_id})`)
+      return data
+    } catch (error) {
+      console.error('Failed to create workflow:', error)
+      throw error
+    }
+  }
+
   return {
     // State
     diagramOffsetX,
@@ -491,6 +642,12 @@ export const useDataflowStore = defineStore('dataflow', () => {
     selectedEdgeId,
     backendSvgContent,
     showBackendOverlay,
+    // Backend state
+    currentWorkflowId,
+    currentWorkflowName,
+    availableModules,
+    moduleRegistry,
+    isLoadingModules,
     // Getters
     availableNodeTypes,
     diagramOffset,
@@ -513,5 +670,8 @@ export const useDataflowStore = defineStore('dataflow', () => {
     updateNode,
     loadBackendSvg,
     toggleBackendOverlay,
+    // Backend integration actions
+    loadAvailableModules,
+    createNewWorkflow,
   }
 })

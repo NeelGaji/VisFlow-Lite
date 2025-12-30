@@ -312,13 +312,17 @@ export function useDataflowCanvas() {
           // Complete the edge connection
           const targetNodeId = portElement.dataset.nodeId
           const targetPortId = portElement.dataset.portId
-          
-          const edge = dataflowStore.completeEdgeCreation(targetNodeId, targetPortId)
-          if (edge) {
-            console.log('Created edge:', edge)
-          } else {
-            console.log('Edge creation failed - invalid connection')
-          }
+
+          dataflowStore.completeEdgeCreation(targetNodeId, targetPortId).then(edge => {
+            if (edge) {
+              console.log('Created edge:', edge)
+            } else {
+              console.log('Edge creation failed - invalid connection')
+            }
+          }).catch(error => {
+            console.error('Error creating edge:', error)
+            alert('Failed to create connection. Please check the console for details.')
+          })
         } else {
           console.log('Cannot connect same port types:', sourcePortType, '->', targetPortType)
           dataflowStore.cancelEdgeCreation()
@@ -338,8 +342,14 @@ export function useDataflowCanvas() {
 
   // Drag and drop event handlers
   function onDragOver(event: DragEvent) {
-    // Check if it's a node type being dragged
-    if (event.dataTransfer?.types.includes('application/visflow-node-type')) {
+    // Check if it's a backend module being dragged
+    if (event.dataTransfer?.types.includes('application/visflow-backend-module')) {
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'copy'
+      isDragOver.value = true
+    }
+    // Also support old node type format for backward compatibility
+    else if (event.dataTransfer?.types.includes('application/visflow-node-type')) {
       event.preventDefault()
       event.dataTransfer.dropEffect = 'copy'
       isDragOver.value = true
@@ -350,25 +360,46 @@ export function useDataflowCanvas() {
     isDragOver.value = false
   }
 
-  function onDrop(event: DragEvent) {
+  async function onDrop(event: DragEvent) {
     event.preventDefault()
     isDragOver.value = false
 
+    // Check for backend module type first (new format)
+    const backendModuleType = event.dataTransfer?.getData('application/visflow-backend-module')
+    if (backendModuleType) {
+      // Calculate position relative to canvas, accounting for diagram offset and zoom
+      const canvasRect = nodesContainer.value?.getBoundingClientRect()
+      if (!canvasRect) return
+
+      const zoom = dataflowStore.zoomLevel
+      const x = (event.clientX - canvasRect.left - dataflowStore.diagramOffsetX) / zoom
+      const y = (event.clientY - canvasRect.top - dataflowStore.diagramOffsetY) / zoom
+
+      console.log('Creating backend module:', backendModuleType, 'at', x, y)
+
+      try {
+        // Call the store's createNode method which will handle backend API calls
+        await dataflowStore.createNode(backendModuleType, x, y)
+      } catch (error) {
+        console.error('Failed to create module:', error)
+        alert('Failed to create module. Please check the console for details.')
+      }
+      return
+    }
+
+    // Fall back to old node type format for backward compatibility
     const nodeType = event.dataTransfer?.getData('application/visflow-node-type')
-    if (!nodeType) return
+    if (nodeType) {
+      const canvasRect = nodesContainer.value?.getBoundingClientRect()
+      if (!canvasRect) return
 
-    // Calculate position relative to canvas, accounting for diagram offset and zoom
-    const canvasRect = nodesContainer.value?.getBoundingClientRect()
-    if (!canvasRect) return
+      const zoom = dataflowStore.zoomLevel
+      const x = (event.clientX - canvasRect.left - dataflowStore.diagramOffsetX) / zoom
+      const y = (event.clientY - canvasRect.top - dataflowStore.diagramOffsetY) / zoom
 
-    const zoom = dataflowStore.zoomLevel
-    const x = (event.clientX - canvasRect.left - dataflowStore.diagramOffsetX) / zoom
-    const y = (event.clientY - canvasRect.top - dataflowStore.diagramOffsetY) / zoom
-
-    console.log('Creating node:', nodeType, 'at', x, y)
-
-    // Create the node - it will automatically appear via Vue reactivity
-    dataflowStore.createNode(nodeType, x, y)
+      console.log('Creating node:', nodeType, 'at', x, y)
+      dataflowStore.createNode(nodeType, x, y)
+    }
   }
 
   function onWheel(event: WheelEvent) {

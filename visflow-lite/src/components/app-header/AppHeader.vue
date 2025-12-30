@@ -20,6 +20,16 @@
       </button>
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav">
+          <li class="nav-item">
+            <button class="btn btn-primary btn-sm me-2" @click="handleNewWorkflow">
+              <i class="bi bi-file-earmark-plus"></i> New Workflow
+            </button>
+          </li>
+          <li class="nav-item" v-if="currentWorkflowName">
+            <span class="navbar-text me-3">
+              <i class="bi bi-diagram-3"></i> {{ currentWorkflowName }}
+            </span>
+          </li>
           <OptionsMenu />
         </ul>
       </div>
@@ -29,6 +39,9 @@
 
 <script setup lang="ts">
 import OptionsMenu from './options-menu/OptionsMenu.vue'
+import { useAppHeader } from './AppHeader'
+
+const { handleNewWorkflow, currentWorkflowName } = useAppHeader()
 </script>
 
 <style scoped lang="scss" src="./AppHeader.scss"></style>

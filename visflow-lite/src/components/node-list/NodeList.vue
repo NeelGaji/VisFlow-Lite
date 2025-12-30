@@ -1,38 +1,52 @@
 <template>
   <div class="node-list">
     <div
-      v-for="nodeType in nodeTypes"
-      :key="nodeType.id"
+      v-for="module in modules"
+      :key="module.type"
       class="node-button"
-      :title="nodeType.title"
+      :title="`${module.name}\n${module.input_ports.length} inputs, ${module.output_ports.length} outputs`"
       draggable="true"
-      @dragstart="onDragStart($event, nodeType)"
+      @dragstart="onDragStart($event, module)"
     >
-      <img class="square-icon" :src="nodeType.icon" :alt="nodeType.title" />
+      <div class="module-icon">
+        {{ getModuleIcon(module) }}
+      </div>
+      <div class="module-name">{{ module.name }}</div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { NodeType } from '@/stores/dataflow/nodeTypes'
+import type { BackendModule } from '@/stores/dataflow/types'
 
 defineProps<{
-  nodeTypes: NodeType[]
+  modules: BackendModule[]
 }>()
 
-function onDragStart(event: DragEvent, nodeType: NodeType) {
+function onDragStart(event: DragEvent, module: BackendModule) {
   if (!event.dataTransfer) return
-  
-  // Store the node type id in the drag data
-  event.dataTransfer.setData('application/visflow-node-type', nodeType.id)
+
+  // Store the backend module type (e.g., "org.vistrails.vistrails.basic::Integer")
+  event.dataTransfer.setData('application/visflow-backend-module', module.type)
   event.dataTransfer.effectAllowed = 'copy'
-  
-  // Set drag image to the icon
-  const img = event.target as HTMLElement
-  const icon = img.querySelector('img') as HTMLImageElement
-  if (icon) {
-    event.dataTransfer.setDragImage(icon, icon.width / 2, icon.height / 2)
-  }
+}
+
+function getModuleIcon(module: BackendModule): string {
+  // Return a simple text icon based on module type
+  const name = module.name.toLowerCase()
+
+  if (name.includes('string')) return '📝'
+  if (name.includes('integer') || name.includes('float')) return '🔢'
+  if (name.includes('boolean')) return '✓'
+  if (name.includes('list')) return '📋'
+  if (name.includes('file')) return '📁'
+  if (name.includes('path')) return '🗂️'
+  if (name.includes('pythoncalc')) return '🐍'
+  if (name.includes('matplotlib')) return '📊'
+  if (name.includes('if')) return '🔀'
+  if (name.includes('map')) return '🔄'
+
+  return '⚙️' // Default gear icon
 }
 </script>
 

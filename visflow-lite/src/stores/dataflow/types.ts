@@ -1,3 +1,19 @@
+// Backend module interface from VisTrailsJL
+export interface BackendModule {
+  package: string
+  name: string
+  type: string  // Full type like "org.vistrails.vistrails.basic::Integer"
+  input_ports: Array<{
+    name: string
+    type: string
+    optional: boolean
+  }>
+  output_ports: Array<{
+    name: string
+    type: string
+  }>
+}
+
 // Port interface for nodes
 export interface PortSpec {
   name: string
@@ -21,6 +37,10 @@ export interface NodeData {
   // Port specifications from backend
   inputs?: PortSpec[]
   outputs?: PortSpec[]
+  // Module metadata from backend
+  parameters?: Record<string, any>
+  annotations?: Record<string, any>
+  package?: string
   // Script editor specific properties
   code?: string
   isRenderingEnabled?: boolean
@@ -33,6 +53,10 @@ export interface NodeData {
   executionError?: string
   warningMessage?: string
   successMessage?: string
+  // Backend integration fields
+  backendModuleId?: number  // Backend module ID for API calls
+  backendModuleType?: string  // Full backend type (e.g., "org.vistrails.vistrails.basic::Integer")
+  backendConnectionId?: number  // Backend connection ID (for edges)
 }
 
 // Edge data interface
@@ -42,6 +66,7 @@ export interface EdgeData {
   sourcePortId: string
   targetNodeId: string
   targetPortId: string
+  backendConnectionId?: number  // Backend connection ID for API calls
 }
 
 // Temporary edge being created
