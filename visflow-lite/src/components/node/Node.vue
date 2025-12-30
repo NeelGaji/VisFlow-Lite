@@ -55,6 +55,8 @@
 import { useNode } from './Node'
 import Port from '@/components/port/Port.vue'
 
+import type { PortSpec } from '@/stores/dataflow/types'
+
 const props = defineProps<{
   id: string
   type: string
@@ -66,6 +68,8 @@ const props = defineProps<{
   isIconized?: boolean
   isSelected?: boolean
   isActive?: boolean
+  inputs?: PortSpec[]
+  outputs?: PortSpec[]
 }>()
 
 const {

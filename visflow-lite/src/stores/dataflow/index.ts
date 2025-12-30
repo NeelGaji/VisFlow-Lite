@@ -8,12 +8,15 @@ export const useDataflowStore = defineStore('dataflow', () => {
   // State
   const diagramOffsetX = ref(0)
   const diagramOffsetY = ref(0)
+  const zoomLevel = ref(1) // 1 = 100%, 0.5 = 50%, 2 = 200%
   const nodes = ref<NodeData[]>([])
   const edges = ref<EdgeData[]>([])
   const edgeBeingCreated = ref<EdgeCreationData | null>(null)
   const canvas = ref<any>(null) // Reference to DataflowCanvas component
   const selectedNodeId = ref<string | null>(null)
   const selectedEdgeId = ref<string | null>(null)
+  const backendSvgContent = ref<string | null>(null) // Backend SVG for overlay comparison
+  const showBackendOverlay = ref(false) // Toggle for showing backend SVG overlay
 
   // Getters
   const availableNodeTypes = computed(() => {
@@ -49,6 +52,31 @@ export const useDataflowStore = defineStore('dataflow', () => {
     diagramOffsetY.value += dy
   }
 
+  function setZoom(newZoom: number, centerX?: number, centerY?: number) {
+    // Clamp zoom between 0.1 (10%) and 5 (500%)
+    const clampedZoom = Math.max(0.1, Math.min(5, newZoom))
+
+    // If center point is provided, adjust offset to zoom towards that point
+    if (centerX !== undefined && centerY !== undefined) {
+      const oldZoom = zoomLevel.value
+      const zoomRatio = clampedZoom / oldZoom
+
+      // Calculate the point in world coordinates
+      const worldX = (centerX - diagramOffsetX.value) / oldZoom
+      const worldY = (centerY - diagramOffsetY.value) / oldZoom
+
+      // Adjust offset so the world point stays at the same screen position
+      diagramOffsetX.value = centerX - worldX * clampedZoom
+      diagramOffsetY.value = centerY - worldY * clampedZoom
+    }
+
+    zoomLevel.value = clampedZoom
+  }
+
+  function resetZoom() {
+    zoomLevel.value = 1
+  }
+
   function setCanvas(canvasInstance: any) {
     canvas.value = canvasInstance
   }
@@ -61,11 +89,14 @@ export const useDataflowStore = defineStore('dataflow', () => {
       x,
       y,
       label: nodeType?.title || type,
-      width: 120,
-      height: 80,
+      width: 120,  // VisTrails default module width
+      height: 60,  // VisTrails default module height
       isIconized: false,
       isSelected: false,
       isActive: false,
+      // Add default port specifications from node type registry
+      inputs: nodeType?.defaultInputs || [],
+      outputs: nodeType?.defaultOutputs || [],
     }
 
     // Initialize type-specific fields
@@ -220,72 +251,124 @@ export const useDataflowStore = defineStore('dataflow', () => {
     nodes.value = []
     edges.value = []
 
+    // WORKAROUND: Backend sends empty inputs/outputs arrays
+    // Infer port specifications from connection data
+    const moduleInputs = new Map<number, Set<string>>()
+    const moduleOutputs = new Map<number, Set<string>>()
+
+    workflowData.connections.forEach(conn => {
+      // Target port is an input
+      if (!moduleInputs.has(conn.target_id)) {
+        moduleInputs.set(conn.target_id, new Set())
+      }
+      moduleInputs.get(conn.target_id)!.add(conn.target_port)
+
+      // Source port is an output
+      if (!moduleOutputs.has(conn.source_id)) {
+        moduleOutputs.set(conn.source_id, new Set())
+      }
+      moduleOutputs.get(conn.source_id)!.add(conn.source_port)
+    })
+
+    console.log('[loadWorkflow] Inferred ports from connections:', {
+      inputs: Array.from(moduleInputs.entries()).map(([id, ports]) => ({ id, ports: Array.from(ports) })),
+      outputs: Array.from(moduleOutputs.entries()).map(([id, ports]) => ({ id, ports: Array.from(ports) }))
+    })
+
     // Calculate bounding box to center the workflow
     if (workflowData.modules.length === 0) {
       return
     }
 
-    const xs = workflowData.modules.map(m => m.x)
-    const ys = workflowData.modules.map(m => m.y)
-    const minX = Math.min(...xs)
-    const minY = Math.min(...ys)
-    const maxX = Math.max(...xs)
-    const maxY = Math.max(...ys)
+    // VisTrails module dimensions (before scaling)
+    const moduleHeight = 60  // VisTrails default height
 
-    // Calculate workflow dimensions
+    // Function to estimate text width (matching Node.ts implementation)
+    function estimateTextWidth(text: string, fontSize: number = 14): number {
+      const charWidth = fontSize * 0.6
+      return text.length * charWidth
+    }
+
+    // Calculate actual width for each module based on its label
+    function getModuleWidth(moduleName: string): number {
+      const textWidth = estimateTextWidth(moduleName)
+      return Math.max(80, textWidth + 40) // Match Node.ts calculation
+    }
+
+    // Calculate bounding box to find coordinates range
+    // VisTrails positions are CENTER points
+    let minX = Infinity
+    let maxX = -Infinity
+    let minY = Infinity
+    let maxY = -Infinity
+
+    workflowData.modules.forEach(m => {
+      const width = getModuleWidth(m.name)
+      minX = Math.min(minX, m.x - width / 2)
+      maxX = Math.max(maxX, m.x + width / 2)
+      minY = Math.min(minY, m.y - moduleHeight / 2)
+      maxY = Math.max(maxY, m.y + moduleHeight / 2)
+    })
+
     const workflowWidth = maxX - minX
     const workflowHeight = maxY - minY
 
-    // Target canvas area (conservative estimate to leave room for panels)
-    const canvasWidth = 800
-    const canvasHeight = 600
+    console.log('Workflow bounds:', { minX, maxX, minY, maxY, width: workflowWidth, height: workflowHeight })
 
-    // Add buffer/margin (20% of the workflow size, minimum 100px)
-    const bufferX = Math.max(workflowWidth * 0.2, 100)
-    const bufferY = Math.max(workflowHeight * 0.2, 100)
+    // Convert backend modules to frontend nodes
+    // VisTrails uses center-based positioning with Y-axis pointing up
+    // We convert to top-left positioning with Y-axis pointing down
+    // Just translate to start from (0,0), no scaling
+    nodes.value = workflowData.modules.map((module) => {
+      // Translate so minimum X is at 0, and flip Y axis
+      const x = module.x - minX
+      const y = maxY - module.y
 
-    // Calculate required space including buffer
-    const requiredWidth = workflowWidth + 2 * bufferX
-    const requiredHeight = workflowHeight + 2 * bufferY
+      console.log(`Module ${module.id} (${module.name}):`, {
+        vistrails: { x: module.x, y: module.y },
+        frontend: { x: x.toFixed(1), y: y.toFixed(1) },
+        inputs: module.inputs,
+        outputs: module.outputs
+      })
 
-    // Calculate scale factor to fit within canvas (if needed)
-    const scaleX = requiredWidth > canvasWidth ? canvasWidth / requiredWidth : 1
-    const scaleY = requiredHeight > canvasHeight ? canvasHeight / requiredHeight : 1
-    const scale = Math.min(scaleX, scaleY, 1) // Don't scale up, only down
+      // Use inferred ports if backend sent empty arrays (workaround for backend bug)
+      const inferredInputs = moduleInputs.get(module.id)
+      const inferredOutputs = moduleOutputs.get(module.id)
 
-    // Apply scaling to workflow coordinates
-    const scaledMinX = minX * scale
-    const scaledMinY = minY * scale
-    const scaledMaxX = maxX * scale
-    const scaledMaxY = maxY * scale
-    const scaledCenterX = (scaledMinX + scaledMaxX) / 2
-    const scaledCenterY = (scaledMinY + scaledMaxY) / 2
+      const inputs = (module.inputs && module.inputs.length > 0)
+        ? module.inputs
+        : (inferredInputs ? Array.from(inferredInputs).map(name => ({ name, type: 'any' })) : [])
 
-    // Offset to center the scaled workflow at (400, 300)
-    const offsetX = 400 - scaledCenterX
-    const offsetY = 300 - scaledCenterY
+      const outputs = (module.outputs && module.outputs.length > 0)
+        ? module.outputs
+        : (inferredOutputs ? Array.from(inferredOutputs).map(name => ({ name, type: 'any' })) : [])
 
-    console.log('Workflow layout:', {
-      original: { minX, minY, maxX, maxY, width: workflowWidth, height: workflowHeight },
-      buffer: { x: bufferX, y: bufferY },
-      required: { width: requiredWidth, height: requiredHeight },
-      scale: scale.toFixed(3),
-      final: { centerX: scaledCenterX, centerY: scaledCenterY, offsetX, offsetY }
+      const nodeData = {
+        id: `node-${module.id}`,
+        type: module.name,
+        x: x,
+        y: y,
+        label: module.name,
+        // Don't set width - let Node component calculate it dynamically based on label
+        // width will be calculated as: max(80, labelWidth + 40)
+        height: 60,  // VisTrails default module height
+        isIconized: false,
+        isSelected: false,
+        isActive: false,
+        // Use inferred ports from connections (workaround for backend bug)
+        inputs: inputs,
+        outputs: outputs,
+      }
+
+      console.log(`[loadWorkflow] Created node data for ${nodeData.id}:`, {
+        hasInputs: nodeData.inputs !== undefined,
+        hasOutputs: nodeData.outputs !== undefined,
+        inputCount: nodeData.inputs?.length,
+        outputCount: nodeData.outputs?.length
+      })
+
+      return nodeData
     })
-
-    // Convert backend modules to frontend nodes with scaling and offset
-    nodes.value = workflowData.modules.map((module) => ({
-      id: `node-${module.id}`,
-      type: module.name,
-      x: module.x * scale + offsetX,
-      y: module.y * scale + offsetY,
-      label: module.name,
-      width: 120,
-      height: 80,
-      isIconized: false,
-      isSelected: false,
-      isActive: false,
-    }))
 
     // Convert backend connections to frontend edges
     edges.value = workflowData.connections.map((conn) => ({
@@ -295,6 +378,38 @@ export const useDataflowStore = defineStore('dataflow', () => {
       targetNodeId: `node-${conn.target_id}`,
       targetPortId: conn.target_port,
     }))
+
+    // Set initial zoom and pan to center and fit the workflow
+    // Assume canvas is 800x600 with 50px margin
+    const canvasWidth = 800
+    const canvasHeight = 600
+    const margin = 50
+    const availableWidth = canvasWidth - 2 * margin
+    const availableHeight = canvasHeight - 2 * margin
+
+    // Calculate scale to fit workflow in viewport
+    const scaleX = workflowWidth > 0 ? availableWidth / workflowWidth : 1
+    const scaleY = workflowHeight > 0 ? availableHeight / workflowHeight : 1
+    const initialZoom = Math.min(scaleX, scaleY, 1) // Don't zoom in, only out
+
+    // Calculate center position
+    // The workflow after translation starts at (0, 0) and extends to (workflowWidth, workflowHeight)
+    const workflowCenterX = workflowWidth / 2
+    const workflowCenterY = workflowHeight / 2
+
+    // Center it in the viewport
+    const viewportCenterX = canvasWidth / 2
+    const viewportCenterY = canvasHeight / 2
+
+    // Initial offset to center the workflow
+    diagramOffsetX.value = viewportCenterX - workflowCenterX * initialZoom
+    diagramOffsetY.value = viewportCenterY - workflowCenterY * initialZoom
+    zoomLevel.value = initialZoom
+
+    console.log('Initial view:', {
+      zoom: initialZoom.toFixed(3),
+      offset: { x: diagramOffsetX.value.toFixed(1), y: diagramOffsetY.value.toFixed(1) }
+    })
 
     console.log('Loaded workflow:', {
       modules: nodes.value.length,
@@ -342,21 +457,47 @@ export const useDataflowStore = defineStore('dataflow', () => {
     selectedEdgeId.value = edgeId
   }
 
+  async function loadBackendSvg(vistrailName: string, version: number) {
+    try {
+      const response = await fetch(`http://localhost:8000/api/workflow/${vistrailName}/version/${version}/svg`)
+      if (response.ok) {
+        const svgText = await response.text()
+        backendSvgContent.value = svgText
+        console.log('Backend SVG loaded successfully, length:', svgText.length)
+      } else {
+        console.error('Failed to load backend SVG:', response.status, response.statusText)
+        backendSvgContent.value = null
+      }
+    } catch (error) {
+      console.error('Error loading backend SVG:', error)
+      backendSvgContent.value = null
+    }
+  }
+
+  function toggleBackendOverlay() {
+    showBackendOverlay.value = !showBackendOverlay.value
+  }
+
   return {
     // State
     diagramOffsetX,
     diagramOffsetY,
+    zoomLevel,
     nodes,
     edges,
     edgeBeingCreated,
     canvas,
     selectedNodeId,
     selectedEdgeId,
+    backendSvgContent,
+    showBackendOverlay,
     // Getters
     availableNodeTypes,
     diagramOffset,
     // Actions
     moveDiagram,
+    setZoom,
+    resetZoom,
     setCanvas,
     createNode,
     removeNode,
@@ -370,5 +511,7 @@ export const useDataflowStore = defineStore('dataflow', () => {
     selectNode,
     selectEdge,
     updateNode,
+    loadBackendSvg,
+    toggleBackendOverlay,
   }
 })

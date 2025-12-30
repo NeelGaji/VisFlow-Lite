@@ -23,14 +23,13 @@ interface Box {
 export function useDataflowCanvas() {
   // Template refs
   const nodesContainer = ref<HTMLElement | null>(null)
-  const edges = ref<SVGElement | null>(null)
 
   // Stores
   const interactionStore = useInteractionStore()
   const dataflowStore = useDataflowStore()
   const historyStore = useHistoryStore()
   const { mousePosition, isShiftPressed } = storeToRefs(interactionStore)
-  const { nodes: canvasNodes, edges: canvasEdges, edgeBeingCreated } = storeToRefs(dataflowStore)
+  const { nodes: canvasNodes, edges: canvasEdges, edgeBeingCreated, backendSvgContent, showBackendOverlay } = storeToRefs(dataflowStore)
   const { trackMouseMove, setShiftPressed } = interactionStore
   const { moveDiagram, setCanvas } = dataflowStore
 
@@ -77,6 +76,33 @@ export function useDataflowCanvas() {
       top: box.y + 'px',
       width: box.width + 'px',
       height: box.height + 'px',
+    }
+  })
+
+  // Compute backend SVG data URL
+  const backendSvgDataUrl = computed(() => {
+    if (!backendSvgContent.value) {
+      console.log('Backend SVG data URL: null (no content)')
+      return null
+    }
+    const dataUrl = 'data:image/svg+xml;base64,' + btoa(backendSvgContent.value)
+    console.log('Backend SVG data URL generated:', {
+      contentLength: backendSvgContent.value.length,
+      dataUrlLength: dataUrl.length,
+      showOverlay: showBackendOverlay.value,
+      preview: dataUrl.substring(0, 100) + '...'
+    })
+    return dataUrl
+  })
+
+  // Compute transform style for zoom and pan
+  const transformStyle = computed(() => {
+    const zoom = dataflowStore.zoomLevel
+    const offsetX = dataflowStore.diagramOffsetX
+    const offsetY = dataflowStore.diagramOffsetY
+    return {
+      transform: `translate(${offsetX}px, ${offsetY}px) scale(${zoom})`,
+      transformOrigin: '0 0',
     }
   })
 
@@ -140,10 +166,10 @@ export function useDataflowCanvas() {
   // Mouse event handlers
   function onMouseDown(event: MouseEvent) {
     const target = event.target as HTMLElement
-    
+
     // Port clicks are handled by Port component via startEdgeCreation
     // which triggers the watcher to set PORT_DRAG mode
-    
+
     // Check if clicking on a node
     const nodeElement = target.closest('.node') as HTMLElement
     if (nodeElement && nodeElement.dataset.nodeId) {
@@ -152,14 +178,28 @@ export function useDataflowCanvas() {
       return
     }
 
-    // Only respond to left click on the SVG background for panning/selecting
-    if (event.target !== edges.value || event.button !== 0) {
+    // Only respond to left click
+    if (event.button !== 0) {
+      return
+    }
+
+    // Check if clicking on canvas background (not on a node or port)
+    // Allow panning when clicking on the canvas div, SVG, or the transform group
+    const isCanvasBackground =
+      target.id === 'dataflow-canvas' ||
+      target.classList.contains('edges-layer') ||
+      target.classList.contains('nodes-container') ||
+      target.tagName === 'svg' ||
+      target.tagName === 'g'
+
+    if (!isCanvasBackground) {
       dragMode.value = DragMode.NONE
       return
     }
 
     // Choose mode based on Shift key
     dragMode.value = isShiftPressed.value ? DragMode.SELECT : DragMode.PAN
+    console.log('Starting drag mode:', dragMode.value)
     dragStartPoint.value = dragEndPoint.value = { x: event.pageX, y: event.pageY }
     lastMouseX.value = event.pageX
     lastMouseY.value = event.pageY
@@ -172,6 +212,7 @@ export function useDataflowCanvas() {
     if (dragMode.value === DragMode.PAN) {
       const dx = event.pageX - lastMouseX.value
       const dy = event.pageY - lastMouseY.value
+      console.log('Panning:', { dx, dy, newOffset: { x: dataflowStore.diagramOffsetX + dx, y: dataflowStore.diagramOffsetY + dy } })
       moveDiagram(dx, dy)
       lastMouseX.value = event.pageX
       lastMouseY.value = event.pageY
@@ -180,17 +221,22 @@ export function useDataflowCanvas() {
     } else if (dragMode.value === DragMode.NODE_DRAG) {
       const dx = event.pageX - lastMouseX.value
       const dy = event.pageY - lastMouseY.value
-      
+
+      // Account for zoom when dragging nodes
+      const zoom = dataflowStore.zoomLevel
+      const scaledDx = dx / zoom
+      const scaledDy = dy / zoom
+
       // Update positions for all dragged nodes
       draggedNodeIds.value.forEach(nodeId => {
         const node = canvasNodes.value.find(n => n.id === nodeId)
         if (node) {
           // Update node data in store - Vue will reactively update the UI
-          node.x += dx
-          node.y += dy
+          node.x += scaledDx
+          node.y += scaledDy
         }
       })
-      
+
       lastMouseX.value = event.pageX
       lastMouseY.value = event.pageY
     } else if (dragMode.value === DragMode.PORT_DRAG) {
@@ -311,17 +357,39 @@ export function useDataflowCanvas() {
     const nodeType = event.dataTransfer?.getData('application/visflow-node-type')
     if (!nodeType) return
 
-    // Calculate position relative to canvas, accounting for diagram offset
+    // Calculate position relative to canvas, accounting for diagram offset and zoom
     const canvasRect = nodesContainer.value?.getBoundingClientRect()
     if (!canvasRect) return
 
-    const x = event.clientX - canvasRect.left - dataflowStore.diagramOffsetX
-    const y = event.clientY - canvasRect.top - dataflowStore.diagramOffsetY
+    const zoom = dataflowStore.zoomLevel
+    const x = (event.clientX - canvasRect.left - dataflowStore.diagramOffsetX) / zoom
+    const y = (event.clientY - canvasRect.top - dataflowStore.diagramOffsetY) / zoom
 
     console.log('Creating node:', nodeType, 'at', x, y)
 
     // Create the node - it will automatically appear via Vue reactivity
     dataflowStore.createNode(nodeType, x, y)
+  }
+
+  function onWheel(event: WheelEvent) {
+    event.preventDefault()
+
+    // Calculate zoom factor based on wheel delta
+    // Positive deltaY = zoom out, Negative deltaY = zoom in
+    const zoomSpeed = 0.001
+    const zoomDelta = -event.deltaY * zoomSpeed
+    const currentZoom = dataflowStore.zoomLevel
+    const newZoom = currentZoom * (1 + zoomDelta)
+
+    // Get mouse position relative to canvas
+    const canvasRect = nodesContainer.value?.getBoundingClientRect()
+    if (!canvasRect) return
+
+    const centerX = event.clientX - canvasRect.left
+    const centerY = event.clientY - canvasRect.top
+
+    // Zoom towards mouse cursor
+    dataflowStore.setZoom(newZoom, centerX, centerY)
   }
 
   // Lifecycle
@@ -355,6 +423,14 @@ export function useDataflowCanvas() {
     }
   })
 
+  // Watch for backend overlay toggle
+  watch(showBackendOverlay, (newVal) => {
+    console.log('Backend overlay toggled:', newVal, {
+      hasContent: !!backendSvgContent.value,
+      hasDataUrl: !!backendSvgDataUrl.value
+    })
+  })
+
   return {
     // Refs
     nodesContainer,
@@ -370,10 +446,15 @@ export function useDataflowCanvas() {
     isPortDragging,
     isDragOver,
     selectBoxStyle,
+    transformStyle,
+    backendSvgContent,
+    showBackendOverlay,
+    backendSvgDataUrl,
     // Methods
     onMouseDown,
     onMouseMove,
     onMouseUp,
+    onWheel,
     onDragOver,
     onDragLeave,
     onDrop,

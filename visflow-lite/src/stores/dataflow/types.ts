@@ -1,3 +1,10 @@
+// Port interface for nodes
+export interface PortSpec {
+  name: string
+  type: string
+  optional?: boolean
+}
+
 // Node data interface
 export interface NodeData {
   id: string
@@ -11,6 +18,9 @@ export interface NodeData {
   isSelected?: boolean
   isActive?: boolean
   isLabelVisible?: boolean
+  // Port specifications from backend
+  inputs?: PortSpec[]
+  outputs?: PortSpec[]
   // Script editor specific properties
   code?: string
   isRenderingEnabled?: boolean

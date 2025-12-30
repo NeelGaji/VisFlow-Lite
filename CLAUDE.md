@@ -1,6 +1,6 @@
 # CLAUDE.md - AI Assistant Context
 
-Last Updated: 2025-12-29 (History Panel Implementation Complete)
+Last Updated: 2025-12-29 (Port ID Mismatch Fixed)
 
 ## Project Overview
 
@@ -433,12 +433,54 @@ Complete implementation of a history panel with undo/redo functionality:
 - Dev server runs without errors
 - All components compile successfully
 
+---
+
+## Recent Additions (2025-12-29 - Session 2)
+
+### Port ID Mismatch Fix
+Fixed critical issue where manually created nodes and backend-loaded nodes used different port ID schemes, preventing edge connections.
+
+**Problem:**
+- Backend nodes used actual port names: `"Result"`, `"value"`, `"input"`, `"output"`
+- Manually created nodes used hardcoded fallback IDs: `"in-0"`, `"out-0"`
+- Edge connections failed when mixing node types
+
+**Solution (4 files updated):**
+
+1. **[nodeTypes.ts](visflow-lite/src/stores/dataflow/nodeTypes.ts)**
+   - Added `defaultInputs?: PortSpec[]` and `defaultOutputs?: PortSpec[]` to `NodeType` interface
+   - Defined default port specs for each node type:
+     - `data-source`: outputs = `[{ name: 'output', type: 'table' }]`
+     - `script-editor`: inputs = `[{ name: 'input', type: 'table' }]`, outputs = `[{ name: 'output', type: 'table' }]`
+
+2. **[dataflow/index.ts](visflow-lite/src/stores/dataflow/index.ts)** - `createNode()` function
+   - Added port initialization: `inputs: nodeType?.defaultInputs || []`, `outputs: nodeType?.defaultOutputs || []`
+   - Now manually created nodes have proper port specifications from registry
+
+3. **[DataflowCanvas.vue](visflow-lite/src/components/dataflow-canvas/DataflowCanvas.vue)**
+   - Added missing props to Node component: `:inputs="node.inputs"`, `:outputs="node.outputs"`
+
+4. **Architecture (already existed, now fully utilized):**
+   - `NodeData` interface already had `inputs?: PortSpec[]` and `outputs?: PortSpec[]`
+   - `loadWorkflow()` already stored backend port specs
+   - `Node.ts` already mapped port specs to port IDs via `portSpec.name → port.id`
+
+**Result:**
+- ✅ Unified port naming across all node types
+- ✅ Backend-loaded nodes use API port names
+- ✅ Manually created nodes use registry port names
+- ✅ Edge connections work correctly between all node types
+- ✅ No more hardcoded `"in-0"` / `"out-0"` fallbacks
+
+---
+
 ## Notes for Future Sessions
 
 - The application is in active development
 - Core functionality (nodes, edges, canvas) is working
 - Script editor node is fully functional with execution engine
 - History panel is fully functional with undo/redo
+- **Port system is now unified** - all nodes use proper port specifications
 - Many planned features have store infrastructure but no UI
 - Code is clean and well-organized
 - TypeScript types are properly defined

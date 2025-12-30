@@ -22,6 +22,13 @@
           History Panel
         </a>
       </li>
+      <li><hr class="dropdown-divider"></li>
+      <li>
+        <a class="dropdown-item" href="#" @click.prevent="toggleBackendOverlay">
+          <i :class="backendOverlayVisible ? 'bi bi-check-square-fill' : 'bi bi-square'" class="me-2"></i>
+          Backend SVG Overlay (Debug)
+        </a>
+      </li>
     </ul>
   </li>
 </template>
@@ -29,7 +36,7 @@
 <script setup lang="ts">
 import { useOptionsMenu } from './OptionsMenu'
 
-const { nodePanelVisible, historyPanelVisible, toggleNodePanel, toggleHistoryPanel } = useOptionsMenu()
+const { nodePanelVisible, historyPanelVisible, backendOverlayVisible, toggleNodePanel, toggleHistoryPanel, toggleBackendOverlay } = useOptionsMenu()
 </script>
 
 <style scoped lang="scss" src="./OptionsMenu.scss"></style>

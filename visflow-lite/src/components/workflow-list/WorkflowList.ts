@@ -41,6 +41,9 @@ export function useWorkflowList() {
       // Load it into the dataflow canvas
       dataflowStore.loadWorkflow(workflowData)
 
+      // Load the backend SVG for overlay comparison
+      await dataflowStore.loadBackendSvg(workflow.vistrailName, workflow.versionId)
+
       console.log('Workflow loaded successfully!')
     } catch (err) {
       console.error('Error loading workflow:', err)
