@@ -1,8 +1,8 @@
 .version-tree-panel {
   position: fixed;
-  top: 0;
+  top: 56px; // Offset by AppHeader height
   right: 300px; // Offset by workflow panel width
-  height: 100vh;
+  height: calc(100vh - 56px); // Subtract header height
   width: 500px; // Wider for better SVG viewing
   background: #fff;
   border-left: 1px solid #dee2e6;
