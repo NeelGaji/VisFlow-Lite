@@ -1,22 +1,91 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useImagesStore, type LayoutMode, type ImageItem } from '@/stores/images'
 import { storeToRefs } from 'pinia'
+import WorkflowPreview from '@/components/workflow-preview/WorkflowPreview.vue'
 
 const imagesStore = useImagesStore()
 const { activeLayout, images, focalImage, surroundingImages, isLoading, error } =
   storeToRefs(imagesStore)
 
-// ── Hover state ──────────────────────────────────────────
+// ── Hover state with delay ───────────────────────────────
 const hoveredImage = ref<ImageItem | null>(null)
+const previewVisible = ref(false)
+const previewImage = ref<ImageItem | null>(null)
+const previewAnchorRect = ref<DOMRect | null>(null)
 
-function onImageEnter(img: ImageItem) {
+let hoverTimer: ReturnType<typeof setTimeout> | null = null
+let leaveTimer: ReturnType<typeof setTimeout> | null = null
+const HOVER_DELAY = 300
+const LEAVE_DELAY = 200
+
+function onImageEnter(img: ImageItem, event: MouseEvent) {
   hoveredImage.value = img
+
+  // Clear any pending leave timer
+  if (leaveTimer) {
+    clearTimeout(leaveTimer)
+    leaveTimer = null
+  }
+
+  // If we're already showing the preview for this image, keep it
+  if (previewImage.value?.id === img.id && previewVisible.value) {
+    updateAnchorRect(event)
+    return
+  }
+
+  // Start hover delay for new image
+  if (hoverTimer) clearTimeout(hoverTimer)
+  hoverTimer = setTimeout(() => {
+    previewImage.value = img
+    updateAnchorRect(event)
+    previewVisible.value = true
+  }, HOVER_DELAY)
 }
 
 function onImageLeave() {
   hoveredImage.value = null
+
+  if (hoverTimer) {
+    clearTimeout(hoverTimer)
+    hoverTimer = null
+  }
+
+  // Delay hiding so user can move to the overlay
+  leaveTimer = setTimeout(() => {
+    previewVisible.value = false
+    previewImage.value = null
+  }, LEAVE_DELAY)
 }
+
+function onOverlayEnter() {
+  // User moved onto the overlay popup — keep it visible
+  if (leaveTimer) {
+    clearTimeout(leaveTimer)
+    leaveTimer = null
+  }
+}
+
+function onOverlayLeave() {
+  // User left the overlay popup — start closing
+  leaveTimer = setTimeout(() => {
+    previewVisible.value = false
+    previewImage.value = null
+    hoveredImage.value = null
+  }, LEAVE_DELAY)
+}
+
+function updateAnchorRect(event: MouseEvent) {
+  const target = (event.currentTarget as HTMLElement)
+  if (target) {
+    previewAnchorRect.value = target.getBoundingClientRect()
+  }
+}
+
+onUnmounted(() => {
+  if (hoverTimer) clearTimeout(hoverTimer)
+  if (leaveTimer) clearTimeout(leaveTimer)
+})
 
 // ── Layout toggle buttons ────────────────────────────────
 const layouts: { mode: LayoutMode; icon: string; label: string }[] = [
@@ -36,13 +105,42 @@ function handleImageClick(imageId: string) {
   }
 }
 
-// ── Surrounding positions for focal layout (circular) ────
+// ── Surrounding positions for focal layout (rectangle) ───
 function getSurroundingStyle(index: number, total: number) {
-  const angle = (2 * Math.PI * index) / total - Math.PI / 2
-  const radiusX = 34 // % from center
-  const radiusY = 34
-  const x = 50 + radiusX * Math.cos(angle)
-  const y = 50 + radiusY * Math.sin(angle)
+  // Rectangle half-sizes (% of container) centred at (50%, 50%)
+  const halfW = 38 // left edge 12%, right edge 88%
+  const halfH = 36 // top edge 14%, bottom edge 86%
+
+  // Perimeter and even spacing
+  const topLen = 2 * halfW
+  const rightLen = 2 * halfH
+  const bottomLen = 2 * halfW
+  const leftLen = 2 * halfH
+  const perimeter = topLen + rightLen + bottomLen + leftLen
+  const step = perimeter / total
+  let d = step * index
+
+  let x: number, y: number
+
+  if (d < topLen) {
+    // Top edge: left-to-right
+    x = 50 - halfW + d
+    y = 50 - halfH
+  } else if ((d -= topLen) < rightLen) {
+    // Right edge: top-to-bottom
+    x = 50 + halfW
+    y = 50 - halfH + d
+  } else if ((d -= rightLen) < bottomLen) {
+    // Bottom edge: right-to-left
+    x = 50 + halfW - d
+    y = 50 + halfH
+  } else {
+    // Left edge: bottom-to-top
+    d -= bottomLen
+    x = 50 - halfW
+    y = 50 + halfH - d
+  }
+
   return {
     left: `${x}%`,
     top: `${y}%`,
@@ -116,12 +214,12 @@ onMounted(() => {
           v-for="img in images"
           :key="img.id"
           class="grid-card"
-          @mouseenter="onImageEnter(img)"
+          @mouseenter="onImageEnter(img, $event)"
           @mouseleave="onImageLeave"
         >
           <div class="card-image-wrapper">
             <img :src="img.src" :alt="img.alt" />
-            <!-- Hover overlay -->
+            <!-- Hover overlay with metadata -->
             <Transition name="overlay-fade">
               <div v-if="hoveredImage?.id === img.id && img.workflow" class="workflow-overlay">
                 <span class="overlay-name">{{ img.workflow.displayName }}</span>
@@ -134,7 +232,6 @@ onMounted(() => {
               </div>
             </Transition>
           </div>
-          <span class="card-label">{{ img.alt }}</span>
         </div>
       </TransitionGroup>
     </div>
@@ -147,7 +244,7 @@ onMounted(() => {
           :key="img.id"
           class="random-card"
           :style="getRandomStyle(img)"
-          @mouseenter="onImageEnter(img)"
+          @mouseenter="onImageEnter(img, $event)"
           @mouseleave="onImageLeave"
         >
           <div class="card-image-wrapper">
@@ -176,7 +273,7 @@ onMounted(() => {
           v-if="focalImage"
           class="focal-center"
           :key="focalImage.id"
-          @mouseenter="onImageEnter(focalImage)"
+          @mouseenter="onImageEnter(focalImage, $event)"
           @mouseleave="onImageLeave"
         >
           <div class="card-image-wrapper focal-image-wrapper">
@@ -205,7 +302,7 @@ onMounted(() => {
           class="surround-card"
           :style="getSurroundingStyle(idx, surroundingImages.length)"
           @click="handleImageClick(img.id)"
-          @mouseenter="onImageEnter(img)"
+          @mouseenter="onImageEnter(img, $event)"
           @mouseleave="onImageLeave"
         >
           <div class="card-image-wrapper">
@@ -219,6 +316,17 @@ onMounted(() => {
         </div>
       </TransitionGroup>
     </div>
+
+    <!-- ── Workflow Preview Popup ──────────────────────── -->
+    <WorkflowPreview
+      :visible="previewVisible"
+      :vistrail-id="previewImage?.workflow?.vistrailId ?? ''"
+      :version-id="previewImage?.workflow?.versionId ?? 0"
+      :title="previewImage?.workflow?.displayName ?? ''"
+      :anchor-rect="previewAnchorRect"
+      @overlay-enter="onOverlayEnter"
+      @overlay-leave="onOverlayLeave"
+    />
   </div>
 </template>
 
@@ -404,7 +512,7 @@ onMounted(() => {
 /* ── GRID LAYOUT ────────────────────────────────────────── */
 .grid-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 16px;
   align-content: start;
   overflow-y: auto;
@@ -427,17 +535,9 @@ onMounted(() => {
 
 .grid-card img {
   width: 100%;
-  height: 160px;
+  aspect-ratio: 4 / 3;
   object-fit: cover;
   display: block;
-}
-
-.card-label {
-  display: block;
-  padding: 8px 12px;
-  font-size: 0.85rem;
-  color: #333;
-  font-weight: 500;
 }
 
 /* Grid TransitionGroup */
