@@ -2,7 +2,7 @@
   <div>
     <nav class="app-header navbar navbar-expand-sm navbar-light bg-white border-bottom">
       <a id="logo" class="navbar-brand">
-        <img src="/logo.png" alt="VisFlow Logo">
+        <img src="/logo.png" alt="VisFlow Logo" />
         <span class="vis">Vis</span>
         <span class="flow">Flow</span>
         <span class="flow">Lite</span>
@@ -31,6 +31,19 @@
             </span>
           </li>
           <OptionsMenu />
+          <li class="nav-item d-flex align-items-center ms-3">
+            <div class="form-check form-switch mb-0">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                role="switch"
+                id="imagesViewToggle"
+                :checked="imagesViewActive"
+                @change="toggleImagesView"
+              />
+              <label class="form-check-label" for="imagesViewToggle">Images</label>
+            </div>
+          </li>
         </ul>
       </div>
     </nav>
@@ -41,7 +54,8 @@
 import OptionsMenu from './options-menu/OptionsMenu.vue'
 import { useAppHeader } from './AppHeader'
 
-const { handleNewWorkflow, currentWorkflowName } = useAppHeader()
+const { handleNewWorkflow, currentWorkflowName, imagesViewActive, toggleImagesView } =
+  useAppHeader()
 </script>
 
 <style scoped lang="scss" src="./AppHeader.scss"></style>

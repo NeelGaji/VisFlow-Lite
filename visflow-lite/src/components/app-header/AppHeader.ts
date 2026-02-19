@@ -1,7 +1,13 @@
 import { useDataflowStore } from '@/stores/dataflow'
+import { usePanelsStore } from '@/stores/panels'
+import { useRouter } from 'vue-router'
+import { storeToRefs } from 'pinia'
 
 export function useAppHeader() {
   const dataflowStore = useDataflowStore()
+  const panelsStore = usePanelsStore()
+  const router = useRouter()
+  const { imagesViewActive } = storeToRefs(panelsStore)
 
   async function handleNewWorkflow() {
     try {
@@ -18,8 +24,19 @@ export function useAppHeader() {
     }
   }
 
+  function toggleImagesView() {
+    panelsStore.toggleImagesView()
+    if (panelsStore.imagesViewActive) {
+      router.push('/images')
+    } else {
+      router.push('/')
+    }
+  }
+
   return {
     handleNewWorkflow,
     currentWorkflowName: dataflowStore.currentWorkflowName,
+    imagesViewActive,
+    toggleImagesView,
   }
 }

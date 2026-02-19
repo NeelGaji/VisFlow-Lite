@@ -10,6 +10,7 @@ export const usePanelsStore = defineStore('panels', () => {
   const workflowPanelVisible = ref(true)
   const versionTreePanelVisible = ref(false)
   const selectedWorkflowForVersionTree = ref<string | null>(null)
+  const imagesViewActive = ref(false)
 
   // Actions
   function toggleNodePanel() {
@@ -54,6 +55,14 @@ export const usePanelsStore = defineStore('panels', () => {
     selectedWorkflowForVersionTree.value = null
   }
 
+  function toggleImagesView() {
+    imagesViewActive.value = !imagesViewActive.value
+  }
+
+  function setImagesViewActive(active: boolean) {
+    imagesViewActive.value = active
+  }
+
   return {
     // State
     nodePanelVisible,
@@ -63,6 +72,7 @@ export const usePanelsStore = defineStore('panels', () => {
     workflowPanelVisible,
     versionTreePanelVisible,
     selectedWorkflowForVersionTree,
+    imagesViewActive,
     // Actions
     toggleNodePanel,
     openQuickNodePanel,
@@ -74,5 +84,7 @@ export const usePanelsStore = defineStore('panels', () => {
     toggleWorkflowPanel,
     openVersionTreePanel,
     closeVersionTreePanel,
+    toggleImagesView,
+    setImagesViewActive,
   }
 })

@@ -29,4 +29,22 @@
       color: #333;
     }
   }
+
+  .form-check.form-switch {
+    display: flex;
+    align-items: center;
+    padding-top: 0;
+    padding-bottom: 0;
+
+    .form-check-input {
+      cursor: pointer;
+    }
+
+    .form-check-label {
+      cursor: pointer;
+      font-size: 0.875rem;
+      color: #333;
+      user-select: none;
+    }
+  }
 }

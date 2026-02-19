@@ -34,3 +34,8 @@ coverage
 
 # Vitest
 __screenshots__/
+
+.vscode/
+../.vscode/
+visflow-lite\.vscode
+visflow-lite\.vscode/*
