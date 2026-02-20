@@ -511,26 +511,24 @@ onMounted(() => {
 
 /* ── GRID LAYOUT ────────────────────────────────────────── */
 .grid-layout {
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 4px;
   align-content: start;
   overflow-y: auto;
 }
 
 .grid-card {
-  background: white;
-  border-radius: 10px;
+  background: #000;
+  border: 1px solid #ccc;
+  border-radius: 2px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition:
-    transform 0.3s ease,
-    box-shadow 0.3s ease;
+  transition: border-color 0.2s ease;
 }
 
 .grid-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+  border-color: #fff;
 }
 
 .grid-card img {
